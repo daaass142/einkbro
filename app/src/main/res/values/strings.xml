@@ -764,4 +764,4 @@
     <string name="proxy_vpn_channel">Mihomo VPN</string>
     <string name="proxy_vpn_notification_title">Mihomo strict proxy is active</string>
     <string name="proxy_vpn_notification_text">Only EinkBro traffic is routed through the application VPN.</string>
-</resources>
+    <string name="proxy_delete">Delete</string>\n</resources>
