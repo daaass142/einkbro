@@ -12,6 +12,7 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 interface WebViewProxyAdapter {
+    fun isSupported(): Boolean
     fun requireSupported()
     suspend fun setProxy(endpoint: BrowserProxyEndpoint)
     suspend fun clearProxy()
@@ -25,8 +26,11 @@ class AndroidWebViewProxyAdapter(
         Handler(Looper.getMainLooper()).post(command)
     }
 
+    override fun isSupported(): Boolean =
+        WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)
+
     override fun requireSupported() {
-        check(WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+        check(isSupported()) {
             "Installed Android System WebView does not support ProxyController"
         }
     }

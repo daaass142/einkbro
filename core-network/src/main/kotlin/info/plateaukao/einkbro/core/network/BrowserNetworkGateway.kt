@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 interface BrowserNetworkGateway {
     val state: StateFlow<BrowserNetworkState>
+    val proxySupported: Boolean
 
     suspend fun prepare()
     suspend fun enableProxy(endpoint: BrowserProxyEndpoint)
@@ -21,6 +22,9 @@ class BrowserNetworkGatewayImpl(
 
     override val state: StateFlow<BrowserNetworkState> =
         mutableState.asStateFlow()
+
+    override val proxySupported: Boolean
+        get() = proxyAdapter.isSupported()
 
     override suspend fun prepare() {
         mutableState.value = BrowserNetworkState.Starting

@@ -838,4 +838,11 @@
     <string name="proxy_dashboard_loading">Opening local Zashboard…</string>
     <string name="proxy_dashboard_load_failed">Zashboard could not be loaded from the bundled app assets.</string>
     <string name="proxy_updated_at">Updated %1$s</string>
+    <string name="proxy_diag_socks">SOCKS listener</string>
+    <string name="proxy_diag_controller">Controller</string>
+    <string name="proxy_diag_webview_proxy">WebView Proxy API</string>
+    <string name="proxy_ready">Ready</string>
+    <string name="proxy_not_ready">Not ready</string>
+    <string name="proxy_supported">Supported</string>
+    <string name="proxy_unsupported">Unsupported</string>
 </resources>

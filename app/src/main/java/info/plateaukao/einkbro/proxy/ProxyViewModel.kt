@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import info.plateaukao.einkbro.core.mihomo.api.MihomoEngine
 import info.plateaukao.einkbro.core.mihomo.api.MihomoProfile
+import info.plateaukao.einkbro.core.mihomo.api.MihomoSessionState
 import info.plateaukao.einkbro.core.mihomo.api.ProxyGroup
 import info.plateaukao.einkbro.core.mihomo.api.RoutingMode
 import info.plateaukao.einkbro.core.mihomo.api.TrafficSnapshot
@@ -13,6 +14,7 @@ import info.plateaukao.einkbro.core.mihomo.profile.ProfileSourceType
 import info.plateaukao.einkbro.core.mihomo.profile.SubscriptionUpdater
 import info.plateaukao.einkbro.core.mihomo.runtime.MihomoSessionManager
 import info.plateaukao.einkbro.core.mihomo.security.SensitiveValueRedactor
+import info.plateaukao.einkbro.core.network.BrowserNetworkGateway
 import info.plateaukao.einkbro.preference.ConfigManager
 import info.plateaukao.einkbro.preference.ProxyTransportMode
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,6 +79,9 @@ data class ProxyUiState(
     val delays: Map<String, Int> = emptyMap(),
     val currentAction: ProxyAction? = null,
     val error: ProxyUiError? = null,
+    val webViewProxySupported: Boolean = false,
+    val socksReady: Boolean = false,
+    val controllerReady: Boolean = false,
 ) {
     val activeProfile: ProfileRecord?
         get() = profiles.firstOrNull { it.id == activeProfileId }
@@ -92,6 +97,7 @@ class ProxyViewModel(
     private val engine: MihomoEngine,
     private val sessionManager: MihomoSessionManager,
     private val coordinator: MihomoBrowserCoordinator,
+    private val networkGateway: BrowserNetworkGateway,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(
         ProxyUiState(
@@ -99,6 +105,7 @@ class ProxyViewModel(
             failClosed = config.proxy.failClosed,
             transportMode = config.proxy.transportMode,
             activeProfileId = config.proxy.activeProfileId,
+            webViewProxySupported = networkGateway.proxySupported,
             runtimeStatus = ProxyUiMapper.runtimeStatus(
                 enabled = config.proxy.enabled,
                 failClosed = config.proxy.failClosed,
@@ -120,6 +127,18 @@ class ProxyViewModel(
                         failClosed = config.proxy.failClosed,
                         transportMode = config.proxy.transportMode,
                         activeProfileId = config.proxy.activeProfileId,
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            sessionManager.state.collectLatest { sessionState ->
+                val ready = sessionState is MihomoSessionState.Running
+                mutableState.update {
+                    it.copy(
+                        socksReady = ready,
+                        controllerReady = ready,
                     )
                 }
             }

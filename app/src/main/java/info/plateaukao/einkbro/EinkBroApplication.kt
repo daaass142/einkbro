@@ -112,7 +112,7 @@ class EinkBroApplication : Application() {
         single { StrictVpnRuntime() }
         single { StrictVpnController(androidContext(), get()) }
         single { MihomoBrowserCoordinator(get(), get(), get(), get(), get()) }
-        viewModel { ProxyViewModel(get(), get(), get(), get(), get(), get()) }
+        viewModel { ProxyViewModel(get(), get(), get(), get(), get(), get(), get()) }
         viewModel { TranslationViewModel(get(), get()) }
         viewModel { TtsViewModel(get(), get(), get()) }
         viewModel { ActionModeMenuViewModel(get()) }

@@ -627,6 +627,22 @@ internal fun DiagnosticsCard(state: ProxyUiState) {
                 DiagnosticRow(stringResource(R.string.proxy_diag_transport), transportLabel(state.transportMode))
                 DiagnosticRow(stringResource(R.string.proxy_diag_runtime), runtimeDiagnosticLabel(state.runtimeStatus))
                 DiagnosticRow(stringResource(R.string.proxy_diag_profile), state.activeProfile?.name ?: "—")
+                DiagnosticRow(
+                    stringResource(R.string.proxy_diag_socks),
+                    readinessLabel(state.socksReady),
+                )
+                DiagnosticRow(
+                    stringResource(R.string.proxy_diag_controller),
+                    readinessLabel(state.controllerReady),
+                )
+                DiagnosticRow(
+                    stringResource(R.string.proxy_diag_webview_proxy),
+                    if (state.webViewProxySupported) {
+                        stringResource(R.string.proxy_supported)
+                    } else {
+                        stringResource(R.string.proxy_unsupported)
+                    },
+                )
                 DiagnosticRow("libmihomo", BuildConfig.LIBMIHOMO_VERSION)
                 DiagnosticRow("mihomo", BuildConfig.MIHOMO_CORE_VERSION)
                 DiagnosticRow("bridgeABI", BuildConfig.MIHOMO_BRIDGE_ABI.toString())
@@ -754,6 +770,11 @@ private fun transportLabel(mode: ProxyTransportMode): String =
         ProxyTransportMode.BROWSER_PROXY -> stringResource(R.string.proxy_transport_browser)
         ProxyTransportMode.STRICT_VPN -> stringResource(R.string.proxy_transport_strict)
     }
+
+@Composable
+private fun readinessLabel(ready: Boolean): String =
+    if (ready) stringResource(R.string.proxy_ready)
+    else stringResource(R.string.proxy_not_ready)
 
 @Composable
 private fun runtimeDiagnosticLabel(status: RuntimeUiStatus): String =
