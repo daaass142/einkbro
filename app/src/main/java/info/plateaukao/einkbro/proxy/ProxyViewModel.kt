@@ -427,7 +427,7 @@ class ProxyViewModel(
             } catch (error: Throwable) {
                 mutableState.update {
                     it.copy(
-                        error = mapError(error, defaultError),
+                        error = ProxyUiMapper.error(error, defaultError),
                         runtimeStatus = ProxyUiMapper.runtimeStatus(
                             enabled = config.proxy.enabled,
                             failClosed = config.proxy.failClosed,
