@@ -5,10 +5,15 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.CookieManager
+import android.view.Gravity
+import android.view.View
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
@@ -36,6 +41,9 @@ class ProxyDashboardActivity : FragmentActivity() {
             return
         }
 
+        // Keep the appassets page on HTTP because Mihomo's loopback controller
+        // is HTTP. Using an HTTPS appassets origin would turn controller XHR into
+        // mixed content and WebView would block it under MIXED_CONTENT_NEVER_ALLOW.
         val assetLoader = WebViewAssetLoader.Builder()
             .setHttpAllowed(true)
             .addPathHandler(
@@ -46,7 +54,28 @@ class ProxyDashboardActivity : FragmentActivity() {
 
         val webView = WebView(this)
         dashboardWebView = webView
-        setContentView(webView)
+        val loadingView = TextView(this).apply {
+            text = getString(R.string.proxy_dashboard_loading)
+            gravity = Gravity.CENTER
+            setPadding(32, 32, 32, 32)
+        }
+        val root = FrameLayout(this).apply {
+            addView(
+                webView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            addView(
+                loadingView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+        setContentView(root)
 
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
@@ -73,16 +102,36 @@ class ProxyDashboardActivity : FragmentActivity() {
                 request: WebResourceRequest,
             ): Boolean {
                 val uri = request.url
+                if (uri.scheme == "about") return false
                 if (uri.scheme == "http" && uri.host == APP_ASSET_HOST) return false
+                if (uri.host == "127.0.0.1" || uri.host == "localhost") {
+                    // Controller requests belong to XHR/WebSocket. Never turn a
+                    // loopback controller navigation into a normal browser tab.
+                    return true
+                }
                 openAsBrowserTab(uri)
                 return true
             }
 
             override fun onPageFinished(view: WebView, url: String) {
+                if (Uri.parse(url).host == APP_ASSET_HOST) {
+                    loadingView.visibility = View.GONE
+                }
                 // The setup URL contains the controller secret in its fragment.
                 // It never enters EinkBro's history DB; clearing this dedicated
                 // WebView history also removes it from back/forward navigation.
                 view.clearHistory()
+            }
+
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceError,
+            ) {
+                if (request.isForMainFrame) {
+                    loadingView.text = getString(R.string.proxy_dashboard_load_failed)
+                    loadingView.visibility = View.VISIBLE
+                }
             }
         }
 
