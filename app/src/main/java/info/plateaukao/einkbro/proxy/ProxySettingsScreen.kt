@@ -347,7 +347,7 @@ private fun ProfileCard(
                     }
                 }
                 TextButton(onClick = onDelete) {
-                    Text(stringResource(R.string.delete))
+                    Text(stringResource(R.string.proxy_delete))
                 }
             }
         }
