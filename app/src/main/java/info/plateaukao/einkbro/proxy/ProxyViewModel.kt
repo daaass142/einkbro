@@ -13,6 +13,7 @@ import info.plateaukao.einkbro.core.mihomo.profile.ProfileSourceType
 import info.plateaukao.einkbro.core.mihomo.profile.SubscriptionUpdater
 import info.plateaukao.einkbro.core.mihomo.runtime.MihomoSessionManager
 import info.plateaukao.einkbro.preference.ConfigManager
+import info.plateaukao.einkbro.preference.ProxyTransportMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.launch
 data class ProxyUiState(
     val enabled: Boolean = false,
     val failClosed: Boolean = true,
+    val transportMode: ProxyTransportMode = ProxyTransportMode.BROWSER_PROXY,
     val activeProfileId: String = "",
     val profiles: List<ProfileRecord> = emptyList(),
     val routingMode: RoutingMode = RoutingMode.RULE,
@@ -44,6 +46,7 @@ class ProxyViewModel(
         ProxyUiState(
             enabled = config.proxy.enabled,
             failClosed = config.proxy.failClosed,
+            transportMode = config.proxy.transportMode,
             activeProfileId = config.proxy.activeProfileId,
         )
     )
@@ -56,6 +59,7 @@ class ProxyViewModel(
                     profiles = records,
                     enabled = config.proxy.enabled,
                     failClosed = config.proxy.failClosed,
+                    transportMode = config.proxy.transportMode,
                     activeProfileId = config.proxy.activeProfileId,
                 )
             }
@@ -75,6 +79,12 @@ class ProxyViewModel(
         }
         mutableState.value = mutableState.value.copy(enabled = enabled)
         if (enabled) refreshRuntimeInternal()
+    }
+
+    fun setTransportMode(mode: ProxyTransportMode) = launchBusy {
+        config.proxy.transportMode = mode
+        mutableState.value = mutableState.value.copy(transportMode = mode)
+        if (config.proxy.enabled) coordinator.restartProxy()
     }
 
     fun setFailClosed(value: Boolean) {

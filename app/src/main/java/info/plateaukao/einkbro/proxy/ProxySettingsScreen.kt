@@ -1,6 +1,8 @@
 package info.plateaukao.einkbro.proxy
 
+import android.app.Activity
 import android.net.Uri
+import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +44,7 @@ import info.plateaukao.einkbro.core.mihomo.api.ProxyGroup
 import info.plateaukao.einkbro.core.mihomo.api.RoutingMode
 import info.plateaukao.einkbro.core.mihomo.profile.ProfileRecord
 import info.plateaukao.einkbro.core.mihomo.profile.ProfileSourceType
+import info.plateaukao.einkbro.preference.ProxyTransportMode
 import java.io.ByteArrayOutputStream
 import java.net.URI
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +60,14 @@ fun ProxySettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showSubscriptionDialog by remember { mutableStateOf(false) }
+
+    val vpnPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.setTransportMode(ProxyTransportMode.STRICT_VPN)
+        }
+    }
 
     val profilePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -97,6 +108,40 @@ fun ProxySettingsScreen(
                 onChecked = viewModel::setEnabled,
             )
         }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        stringResource(R.string.proxy_transport),
+                        style = MaterialTheme.typography.subtitle1,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = state.transportMode == ProxyTransportMode.BROWSER_PROXY,
+                            onClick = {
+                                viewModel.setTransportMode(ProxyTransportMode.BROWSER_PROXY)
+                            },
+                        )
+                        Text(stringResource(R.string.proxy_transport_browser))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = state.transportMode == ProxyTransportMode.STRICT_VPN,
+                            onClick = {
+                                val permission = VpnService.prepare(context)
+                                if (permission == null) {
+                                    viewModel.setTransportMode(ProxyTransportMode.STRICT_VPN)
+                                } else {
+                                    vpnPermission.launch(permission)
+                                }
+                            },
+                        )
+                        Text(stringResource(R.string.proxy_transport_strict))
+                    }
+                }
+            }
+        }
+
         item {
             SettingToggleCard(
                 title = stringResource(R.string.proxy_fail_closed),
