@@ -247,7 +247,10 @@ internal fun ProxyErrorCard(
     ProxyPanel() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(errorTitle(error.category), style = MaterialTheme.typography.subtitle1)
-            Text(error.message, style = MaterialTheme.typography.body2)
+            Text(
+                if (error.message.isBlank()) errorDefaultMessage(error.category) else error.message,
+                style = MaterialTheme.typography.body2,
+            )
             TextButton(onClick = onDismiss) {
                 Text(stringResource(android.R.string.ok))
             }
@@ -690,6 +693,16 @@ private fun errorTitle(category: ProxyErrorCategory): String =
         ProxyErrorCategory.VPN_PERMISSION -> stringResource(R.string.proxy_error_vpn_permission)
         ProxyErrorCategory.RUNTIME -> stringResource(R.string.proxy_error_runtime)
         ProxyErrorCategory.UNKNOWN -> stringResource(R.string.proxy_error)
+    }
+
+@Composable
+private fun errorDefaultMessage(category: ProxyErrorCategory): String =
+    when (category) {
+        ProxyErrorCategory.VPN_PERMISSION ->
+            stringResource(R.string.proxy_vpn_permission_denied_message)
+        ProxyErrorCategory.PROFILE_REQUIRED ->
+            stringResource(R.string.proxy_profile_required_message)
+        else -> stringResource(R.string.proxy_status_error_summary)
     }
 
 @Composable
