@@ -110,6 +110,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
+import org.koin.androidx.viewmodel.ext.android.viewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -117,7 +118,7 @@ import java.util.TimeZone
 class SettingActivity : FragmentActivity(), BackupOps {
     private val config: ConfigManager by inject()
     private val driveRepository: GoogleDriveRepository by inject()
-    private val proxyViewModel: ProxyViewModel by org.koin.androidx.viewmodel.ext.android.viewModel()
+    private val proxyViewModel: ProxyViewModel by viewModel()
     private val dialogManager: DialogManager by lazy { DialogManager(this) }
     private val backupUnit: BackupUnit by lazy { BackupUnit(this) }
 
