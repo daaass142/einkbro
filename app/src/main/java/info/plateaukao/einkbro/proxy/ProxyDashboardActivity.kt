@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.webkit.CookieManager
 import android.view.Gravity
 import android.view.View
-import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -15,6 +14,7 @@ import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
+import androidx.webkit.WebResourceErrorCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import info.plateaukao.einkbro.BuildConfig
@@ -126,7 +126,7 @@ class ProxyDashboardActivity : FragmentActivity() {
             override fun onReceivedError(
                 view: WebView,
                 request: WebResourceRequest,
-                error: WebResourceError,
+                error: WebResourceErrorCompat,
             ) {
                 if (request.isForMainFrame) {
                     loadingView.text = getString(R.string.proxy_dashboard_load_failed)
