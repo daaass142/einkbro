@@ -442,10 +442,9 @@ class ProxyViewModel(
             is MihomoException.InvalidProfile -> ProxyErrorCategory.PROFILE
             is SecurityException -> ProxyErrorCategory.VPN_PERMISSION
             is IllegalArgumentException,
-            is IllegalStateException,
-            -> if (
+            is IllegalStateException -> if (
                 error.message.orEmpty().contains("profile", ignoreCase = true) &&
-                error.message.orEmpty().contains("enable", ignoreCase = true)
+                error.message.orEmpty().contains("enabl", ignoreCase = true)
             ) {
                 ProxyErrorCategory.PROFILE_REQUIRED
             } else {
@@ -457,9 +456,13 @@ class ProxyViewModel(
 
         return ProxyUiError(
             category = category,
-            message = SensitiveValueRedactor.redactUrl(
-                error.message ?: error.javaClass.simpleName
-            ),
+            message = if (category == ProxyErrorCategory.PROFILE_REQUIRED) {
+                ""
+            } else {
+                SensitiveValueRedactor.redactUrl(
+                    error.message ?: error.javaClass.simpleName
+                )
+            },
         )
     }
 
