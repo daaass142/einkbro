@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonNull
 
 internal class MihomoRuntimeManager(
     private val loader: LibMihomoLoader,
@@ -21,8 +22,7 @@ internal class MihomoRuntimeManager(
         lifecycleMutex.withLock {
             if (
                 mutableState.value == MihomoState.Loaded ||
-                mutableState.value == MihomoState.Running ||
-                mutableState.value == MihomoState.Stopped
+                mutableState.value == MihomoState.Running
             ) {
                 return
             }
@@ -31,9 +31,10 @@ internal class MihomoRuntimeManager(
             try {
                 loader.load()
                 mutableState.value = MihomoState.Loaded
-            } catch (error: MihomoException) {
-                mutableState.value = MihomoState.Failed(error)
-                throw error
+            } catch (error: Throwable) {
+                val typed = error.asMihomoException("Failed to load mihomo runtime")
+                mutableState.value = MihomoState.Failed(typed)
+                throw typed
             }
         }
     }
@@ -51,38 +52,36 @@ internal class MihomoRuntimeManager(
                 loader.load()
                 actions.quickSetup(homeDir, platformVersion, selectedMap)
                 mutableState.value = MihomoState.Running
-            } catch (error: MihomoException) {
-                mutableState.value = MihomoState.Failed(error)
-                throw error
             } catch (error: Throwable) {
-                val wrapped = MihomoException.RuntimeFailure(
-                    "Failed to start mihomo runtime",
-                    error,
-                )
-                mutableState.value = MihomoState.Failed(wrapped)
-                throw wrapped
+                val typed = error.asMihomoException("Failed to start mihomo runtime")
+                mutableState.value = MihomoState.Failed(typed)
+                throw typed
             }
         }
     }
 
     suspend fun stop() {
         lifecycleMutex.withLock {
-            if (
-                mutableState.value == MihomoState.Stopped ||
-                mutableState.value == MihomoState.Unloaded
-            ) {
-                mutableState.value = MihomoState.Stopped
-                return
+            when (mutableState.value) {
+                MihomoState.Unloaded,
+                MihomoState.Stopped,
+                -> return
+
+                else -> Unit
             }
 
             mutableState.value = MihomoState.Stopping
             try {
-                actions.invoke("stopListener", kotlinx.serialization.json.JsonNull)
+                actions.invoke("stopListener", JsonNull)
                 mutableState.value = MihomoState.Stopped
-            } catch (error: MihomoException) {
-                mutableState.value = MihomoState.Failed(error)
-                throw error
+            } catch (error: Throwable) {
+                val typed = error.asMihomoException("Failed to stop mihomo runtime")
+                mutableState.value = MihomoState.Failed(typed)
+                throw typed
             }
         }
     }
+
+    private fun Throwable.asMihomoException(message: String): MihomoException =
+        this as? MihomoException ?: MihomoException.RuntimeFailure(message, this)
 }

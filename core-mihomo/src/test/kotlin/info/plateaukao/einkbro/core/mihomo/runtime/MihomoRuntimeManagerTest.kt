@@ -1,11 +1,13 @@
 package info.plateaukao.einkbro.core.mihomo.runtime
 
+import info.plateaukao.einkbro.core.mihomo.api.MihomoState
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class MihomoRuntimeManagerTest {
@@ -22,6 +24,7 @@ class MihomoRuntimeManagerTest {
 
         assertEquals(1, bridge.loadCalls)
         assertEquals(1, actions.quickSetupCalls)
+        assertSame(MihomoState.Running, manager.state.value)
     }
 
     @Test
@@ -36,6 +39,37 @@ class MihomoRuntimeManagerTest {
         manager.stop()
 
         assertEquals(1, actions.stopCalls)
+        assertSame(MihomoState.Stopped, manager.state.value)
+    }
+
+    @Test
+    fun stopBeforeLoadDoesNotPretendRuntimeWasLoaded() = runTest {
+        val bridge = CountingBridge()
+        val manager = MihomoRuntimeManager(
+            LibMihomoLoader(bridge, nativeLibraryDir = { "/native" }),
+            CountingActionClient(),
+        )
+
+        manager.stop()
+
+        assertEquals(0, bridge.loadCalls)
+        assertSame(MihomoState.Unloaded, manager.state.value)
+    }
+
+    @Test
+    fun loadAfterStoppedStateRevalidatesLoaderState() = runTest {
+        val bridge = CountingBridge()
+        val manager = MihomoRuntimeManager(
+            LibMihomoLoader(bridge, nativeLibraryDir = { "/native" }),
+            CountingActionClient(),
+        )
+
+        manager.start("/home", 36, emptyMap())
+        manager.stop()
+        manager.load()
+
+        assertEquals(1, bridge.loadCalls)
+        assertSame(MihomoState.Loaded, manager.state.value)
     }
 
     private class CountingBridge : LibMihomoBridge {

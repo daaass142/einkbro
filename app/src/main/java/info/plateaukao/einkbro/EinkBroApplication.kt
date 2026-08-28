@@ -24,6 +24,8 @@ import info.plateaukao.einkbro.browser.Cookie
 import info.plateaukao.einkbro.browser.Javascript
 import info.plateaukao.einkbro.database.BookmarkManager
 import info.plateaukao.einkbro.database.RecordRepository
+import info.plateaukao.einkbro.core.mihomo.api.MihomoEngine
+import info.plateaukao.einkbro.core.mihomo.runtime.LibMihomoEngine
 import info.plateaukao.einkbro.preference.ConfigManager
 import info.plateaukao.einkbro.search.suggestion.SearchSuggestionViewModel
 import info.plateaukao.einkbro.data.remote.GoogleDriveRepository
@@ -87,6 +89,7 @@ class EinkBroApplication : Application() {
         single { InstapaperRepository() }
         single { GoogleDriveRepository() }
         single { SearchSuggestionViewModel() }
+        single<MihomoEngine> { LibMihomoEngine.create(androidContext()) }
         viewModel { TranslationViewModel(get(), get()) }
         viewModel { TtsViewModel(get(), get(), get()) }
         viewModel { ActionModeMenuViewModel(get()) }
