@@ -1,5 +1,8 @@
 name: Build
 on: [pull_request, push]
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -42,13 +45,14 @@ jobs:
           distribution: "zulu"
           java-version: 17
           cache: gradle
-      - name: Decode Keystore
-        # tr + -i match the leniency of Node's Buffer.from(..., 'base64'),
-        # which the previous action used: ignore whitespace/non-alphabet bytes.
+      - name: Decode production keystore
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: echo "${{ secrets.KEYSTORE }}" | tr -d '[:space:]' | base64 -di > "$RUNNER_TEMP/android_keystore.keystore"
-      - name: Build the app
-        # assembleReleaseAlt builds the side-by-side `info.plateaukao.einkbro.a` variant
-        # alongside the main release; -PuniversalApk applies to both.
+      - name: Build unsigned feature artifacts
+        if: github.ref != 'refs/heads/main'
+        run: ./gradlew assembleRelease assembleReleaseAlt -PuniversalApk
+      - name: Build signed production artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: ./gradlew assembleRelease assembleReleaseAlt -PuniversalApk -Pandroid.injected.signing.store.file=$RUNNER_TEMP/android_keystore.keystore -Pandroid.injected.signing.store.password=${{ secrets.PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.PASSWORD }}
       - name: Publish snapshot pre-release
         # Rolling pre-release replacing the old CI-artifact "snapshot" downloads:
