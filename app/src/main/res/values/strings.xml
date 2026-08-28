@@ -726,4 +726,10 @@
     <string name="test_connection_testing">Testing…</string>
     <string name="test_connection_success">Connection OK (%1$s)</string>
     <string name="test_connection_failed">Connection failed: %1$s</string>
+
+    <string name="proxy_startup_failed_title">Proxy unavailable</string>
+    <string name="proxy_startup_failed_message">Mihomo could not start. Browsing is blocked to prevent a direct connection.\n\n%1$s</string>
+    <string name="proxy_retry">Retry proxy</string>
+    <string name="proxy_use_direct_once">Use direct once</string>
+
 </resources>
