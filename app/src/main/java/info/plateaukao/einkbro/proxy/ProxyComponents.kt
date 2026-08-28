@@ -183,6 +183,7 @@ private fun TransportRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .heightIn(min = 56.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -222,6 +223,7 @@ private fun SettingsSwitchCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = enabled, role = Role.Switch) { onCheckedChange(!checked) }
+                .heightIn(min = 72.dp)
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -339,7 +341,8 @@ private fun ProfileCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = currentAction == null, role = Role.RadioButton, onClick = onSelect),
+                    .clickable(enabled = currentAction == null, role = Role.RadioButton, onClick = onSelect)
+                    .heightIn(min = 56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(
@@ -395,6 +398,7 @@ internal fun RoutingModeCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(enabled = state.currentAction == null, role = Role.RadioButton) { onMode(mode) }
+                        .heightIn(min = 52.dp)
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -563,6 +567,7 @@ internal fun NodePickerDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable(role = Role.RadioButton) { onSelect(node) }
+                                .heightIn(min = 52.dp)
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
