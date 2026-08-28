@@ -3,7 +3,6 @@ package info.plateaukao.einkbro.proxy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import info.plateaukao.einkbro.core.mihomo.api.MihomoEngine
-import info.plateaukao.einkbro.core.mihomo.api.MihomoException
 import info.plateaukao.einkbro.core.mihomo.api.MihomoProfile
 import info.plateaukao.einkbro.core.mihomo.api.ProxyGroup
 import info.plateaukao.einkbro.core.mihomo.api.RoutingMode
@@ -100,7 +99,12 @@ class ProxyViewModel(
             failClosed = config.proxy.failClosed,
             transportMode = config.proxy.transportMode,
             activeProfileId = config.proxy.activeProfileId,
-            runtimeStatus = runtimeStatus(coordinator.state.value),
+            runtimeStatus = ProxyUiMapper.runtimeStatus(
+                enabled = config.proxy.enabled,
+                failClosed = config.proxy.failClosed,
+                transportMode = config.proxy.transportMode,
+                browserState = coordinator.state.value,
+            ),
         )
     )
 
@@ -127,7 +131,12 @@ class ProxyViewModel(
                     it.copy(
                         enabled = config.proxy.enabled,
                         transportMode = config.proxy.transportMode,
-                        runtimeStatus = runtimeStatus(browserState),
+                        runtimeStatus = ProxyUiMapper.runtimeStatus(
+                            enabled = config.proxy.enabled,
+                            failClosed = config.proxy.failClosed,
+                            transportMode = config.proxy.transportMode,
+                            browserState = browserState,
+                        ),
                     )
                 }
             }
@@ -181,7 +190,12 @@ class ProxyViewModel(
         mutableState.update {
             it.copy(
                 failClosed = value,
-                runtimeStatus = runtimeStatus(coordinator.state.value),
+                runtimeStatus = ProxyUiMapper.runtimeStatus(
+                            enabled = config.proxy.enabled,
+                            failClosed = config.proxy.failClosed,
+                            transportMode = config.proxy.transportMode,
+                            browserState = coordinator.state.value,
+                        ),
             )
         }
     }
@@ -225,7 +239,12 @@ class ProxyViewModel(
                 enabled = config.proxy.enabled,
                 activeProfileId = config.proxy.activeProfileId,
                 groups = if (config.proxy.enabled) it.groups else emptyList(),
-                runtimeStatus = runtimeStatus(coordinator.state.value),
+                runtimeStatus = ProxyUiMapper.runtimeStatus(
+                            enabled = config.proxy.enabled,
+                            failClosed = config.proxy.failClosed,
+                            transportMode = config.proxy.transportMode,
+                            browserState = coordinator.state.value,
+                        ),
             )
         }
     }
@@ -327,7 +346,7 @@ class ProxyViewModel(
         error: Throwable,
         category: ProxyErrorCategory = ProxyErrorCategory.UNKNOWN,
     ) {
-        mutableState.update { it.copy(error = mapError(error, category)) }
+        mutableState.update { it.copy(error = ProxyUiMapper.error(error, category)) }
     }
 
     fun reportVpnPermissionDenied() {
@@ -390,80 +409,18 @@ class ProxyViewModel(
                 mutableState.update {
                     it.copy(
                         error = mapError(error, defaultError),
-                        runtimeStatus = runtimeStatus(coordinator.state.value),
+                        runtimeStatus = ProxyUiMapper.runtimeStatus(
+                            enabled = config.proxy.enabled,
+                            failClosed = config.proxy.failClosed,
+                            transportMode = config.proxy.transportMode,
+                            browserState = coordinator.state.value,
+                        ),
                     )
                 }
             } finally {
                 mutableState.update { it.copy(currentAction = null) }
             }
         }
-    }
-
-    private fun runtimeStatus(browserState: MihomoBrowserState): RuntimeUiStatus =
-        when (browserState) {
-            MihomoBrowserState.Unprepared ->
-                if (config.proxy.enabled) RuntimeUiStatus.Starting else RuntimeUiStatus.Off
-
-            MihomoBrowserState.Preparing ->
-                RuntimeUiStatus.Starting
-
-            MihomoBrowserState.Direct ->
-                if (config.proxy.enabled) RuntimeUiStatus.TemporaryDirect else RuntimeUiStatus.Off
-
-            is MihomoBrowserState.Proxied ->
-                when (config.proxy.transportMode) {
-                    ProxyTransportMode.BROWSER_PROXY ->
-                        RuntimeUiStatus.ProtectedBrowserProxy(browserState.session.profile.name)
-
-                    ProxyTransportMode.STRICT_VPN ->
-                        RuntimeUiStatus.ProtectedStrictVpn(browserState.session.profile.name)
-                }
-
-            is MihomoBrowserState.Failed -> {
-                val reason = SensitiveValueRedactor.redactUrl(
-                    browserState.error.message ?: browserState.error.javaClass.simpleName
-                )
-                if (config.proxy.enabled && config.proxy.failClosed) {
-                    RuntimeUiStatus.Blocked(reason)
-                } else {
-                    RuntimeUiStatus.Error(reason)
-                }
-            }
-        }
-
-    private fun mapError(
-        error: Throwable,
-        defaultCategory: ProxyErrorCategory,
-    ): ProxyUiError {
-        val category = when (error) {
-            is MihomoException.NativeLoadFailure,
-            is MihomoException.BridgeAbiMismatch -> ProxyErrorCategory.APP_INCOMPATIBLE
-
-            is MihomoException.InvalidProfile -> ProxyErrorCategory.PROFILE
-            is SecurityException -> ProxyErrorCategory.VPN_PERMISSION
-            is IllegalArgumentException,
-            is IllegalStateException -> if (
-                error.message.orEmpty().contains("profile", ignoreCase = true) &&
-                error.message.orEmpty().contains("enabl", ignoreCase = true)
-            ) {
-                ProxyErrorCategory.PROFILE_REQUIRED
-            } else {
-                defaultCategory
-            }
-
-            else -> defaultCategory
-        }
-
-        return ProxyUiError(
-            category = category,
-            message = if (category == ProxyErrorCategory.PROFILE_REQUIRED) {
-                ""
-            } else {
-                SensitiveValueRedactor.redactUrl(
-                    error.message ?: error.javaClass.simpleName
-                )
-            },
-        )
     }
 
     private companion object {
