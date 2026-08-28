@@ -267,50 +267,54 @@ internal fun ProfileSection(
     onRefresh: (ProfileRecord) -> Unit,
     onDeleteRequest: (ProfileRecord) -> Unit,
 ) {
-    SectionTitle(stringResource(R.string.proxy_profiles))
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle(stringResource(R.string.proxy_profiles))
 
-    if (state.profiles.isEmpty()) {
-        ProxyPanel() {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    stringResource(R.string.proxy_no_profiles_title),
-                    style = MaterialTheme.typography.subtitle1,
-                )
-                Text(stringResource(R.string.proxy_no_profiles))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onImport) {
-                        Text(stringResource(R.string.proxy_import_yaml))
-                    }
-                    OutlinedButton(onClick = onAddSubscription) {
-                        Text(stringResource(R.string.proxy_add_subscription))
+        if (state.profiles.isEmpty()) {
+            ProxyPanel() {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(R.string.proxy_no_profiles_title),
+                        style = MaterialTheme.typography.subtitle1,
+                    )
+                    Text(stringResource(R.string.proxy_no_profiles))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onImport) {
+                            Text(stringResource(R.string.proxy_import_yaml))
+                        }
+                        OutlinedButton(onClick = onAddSubscription) {
+                            Text(stringResource(R.string.proxy_add_subscription))
+                        }
                     }
                 }
             }
-        }
-        return
-    }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(onClick = onImport, enabled = state.currentAction == null) {
+                    Text(stringResource(R.string.proxy_import_yaml))
+                }
+                OutlinedButton(
+                    onClick = onAddSubscription,
+                    enabled = state.currentAction == null,
+                ) {
+                    Text(stringResource(R.string.proxy_add_subscription))
+                }
+            }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Button(onClick = onImport, enabled = state.currentAction == null) {
-            Text(stringResource(R.string.proxy_import_yaml))
+            state.profiles.forEach { profile ->
+                ProfileCard(
+                    profile = profile,
+                    selected = state.activeProfileId == profile.id,
+                    currentAction = state.currentAction,
+                    onSelect = { onSelect(profile) },
+                    onRefresh = { onRefresh(profile) },
+                    onDeleteRequest = { onDeleteRequest(profile) },
+                )
+            }
         }
-        OutlinedButton(onClick = onAddSubscription, enabled = state.currentAction == null) {
-            Text(stringResource(R.string.proxy_add_subscription))
-        }
-    }
-
-    state.profiles.forEach { profile ->
-        ProfileCard(
-            profile = profile,
-            selected = state.activeProfileId == profile.id,
-            currentAction = state.currentAction,
-            onSelect = { onSelect(profile) },
-            onRefresh = { onRefresh(profile) },
-            onDeleteRequest = { onDeleteRequest(profile) },
-        )
     }
 }
 
@@ -439,20 +443,22 @@ internal fun ProxyGroupsSection(
     onOpenPicker: (ProxyGroup) -> Unit,
     onTestDelay: (String) -> Unit,
 ) {
-    SectionTitle(stringResource(R.string.proxy_groups))
-    if (state.groups.isEmpty()) {
-        Text(stringResource(R.string.proxy_no_groups), style = MaterialTheme.typography.body2)
-        return
-    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle(stringResource(R.string.proxy_groups))
 
-    state.groups.forEach { group ->
-        ProxyGroupCard(
-            group = group,
-            delays = state.delays,
-            currentAction = state.currentAction,
-            onOpenPicker = { onOpenPicker(group) },
-            onTestDelay = onTestDelay,
-        )
+        if (state.groups.isEmpty()) {
+            Text(stringResource(R.string.proxy_no_groups), style = MaterialTheme.typography.body2)
+        } else {
+            state.groups.forEach { group ->
+                ProxyGroupCard(
+                    group = group,
+                    delays = state.delays,
+                    currentAction = state.currentAction,
+                    onOpenPicker = { onOpenPicker(group) },
+                    onTestDelay = onTestDelay,
+                )
+            }
+        }
     }
 }
 
