@@ -103,7 +103,7 @@ class ProxyDashboardActivity : FragmentActivity() {
         fun encode(value: String): String =
             URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
-        return "http://$APP_ASSET_HOST/zashboard/#/setup" +
+        return "http://$APP_ASSET_HOST/zashboard/index.html#/setup" +
             "?protocol=http" +
             "&hostname=${encode(host)}" +
             "&port=$port" +

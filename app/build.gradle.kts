@@ -40,8 +40,13 @@ val fetchZashboard = tasks.register<VerifiedDownloadTask>("fetchZashboard") {
 
 val unpackZashboard = tasks.register<Sync>("unpackZashboard") {
     dependsOn(fetchZashboard)
-    from({ zipTree(zashboardZip.get().asFile) })
-    into(generatedZashboardAssets.map { it.dir("zashboard") })
+    from({ zipTree(zashboardZip.get().asFile) }) {
+        eachFile {
+            path = path.removePrefix("dist/")
+        }
+        includeEmptyDirs = false
+    }
+    into(generatedZashboardAssets)
 }
 
 // A ValueSource so the timestamp is (re)computed on every build, even when the
