@@ -1,11 +1,13 @@
 package info.plateaukao.einkbro.proxy
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -28,8 +30,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import info.plateaukao.einkbro.BuildConfig
 import info.plateaukao.einkbro.R
@@ -58,7 +63,7 @@ internal fun RuntimeStatusCard(
         is RuntimeUiStatus.Error -> stringResource(R.string.proxy_status_error)
     }
 
-    Card(modifier = Modifier.fillMaxWidth(), elevation = 2.dp) {
+    ProxyPanel(borderWidth = 2.dp) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(R.string.proxy_status_title), style = MaterialTheme.typography.caption)
             Text(statusTitle, style = MaterialTheme.typography.h6)
@@ -141,7 +146,7 @@ internal fun TransportCard(
     onSelectBrowser: () -> Unit,
     onSelectStrictVpn: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Column(Modifier.padding(vertical = 8.dp)) {
             Text(
                 stringResource(R.string.proxy_transport),
@@ -177,7 +182,7 @@ private fun TransportRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -212,11 +217,11 @@ private fun SettingsSwitchCard(
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = enabled) { onCheckedChange(!checked) }
+                .clickable(enabled = enabled, role = Role.Switch) { onCheckedChange(!checked) }
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -239,7 +244,7 @@ internal fun ProxyErrorCard(
     error: ProxyUiError,
     onDismiss: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(errorTitle(error.category), style = MaterialTheme.typography.subtitle1)
             Text(error.message, style = MaterialTheme.typography.body2)
@@ -262,7 +267,7 @@ internal fun ProfileSection(
     SectionTitle(stringResource(R.string.proxy_profiles))
 
     if (state.profiles.isEmpty()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
+        ProxyPanel() {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     stringResource(R.string.proxy_no_profiles_title),
@@ -322,12 +327,12 @@ private fun ProfileCard(
         else -> false
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Column(Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = currentAction == null, onClick = onSelect),
+                    .clickable(enabled = currentAction == null, role = Role.RadioButton, onClick = onSelect),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(
@@ -366,14 +371,14 @@ internal fun RoutingModeCard(
     state: ProxyUiState,
     onMode: (RoutingMode) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Column(Modifier.padding(12.dp)) {
             Text(stringResource(R.string.proxy_routing_mode), style = MaterialTheme.typography.subtitle1)
             RoutingMode.entries.forEach { mode ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = state.currentAction == null) { onMode(mode) }
+                        .clickable(enabled = state.currentAction == null, role = Role.RadioButton) { onMode(mode) }
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -403,7 +408,7 @@ internal fun TrafficCard(
     state: ProxyUiState,
     onRefresh: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -463,7 +468,7 @@ private fun ProxyGroupCard(
         currentAction is ProxyAction.TestingDelay &&
         currentAction.proxyName == selected
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(group.name, style = MaterialTheme.typography.subtitle1)
             Text(
@@ -535,12 +540,13 @@ internal fun NodePickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                    items(filtered, key = { it }) { node ->
+                    items(filtered) { node ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelect(node) }
+                                .clickable(role = Role.RadioButton) { onSelect(node) }
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -568,7 +574,7 @@ internal fun AdvancedDashboardCard(
     enabled: Boolean,
     onOpen: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ProxyPanel() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(R.string.proxy_advanced_title), style = MaterialTheme.typography.subtitle1)
             Text(stringResource(R.string.proxy_advanced_summary), style = MaterialTheme.typography.body2)
@@ -583,10 +589,11 @@ internal fun AdvancedDashboardCard(
 internal fun DiagnosticsCard(state: ProxyUiState) {
     var expanded by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = !expanded }
+    ProxyPanel(
+        modifier = Modifier.clickable(
+            role = Role.Button,
+            onClick = { expanded = !expanded },
+        )
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.proxy_diagnostics), style = MaterialTheme.typography.subtitle1)
@@ -664,8 +671,12 @@ private fun profileSourceLabel(profile: ProfileRecord): String =
             val host = runCatching { URI(profile.sourceUrl.orEmpty()).host }
                 .getOrNull()
                 .orEmpty()
-                .ifBlank { stringResource(R.string.proxy_subscription) }
-            stringResource(R.string.proxy_subscription_host, host)
+            val safeHost = if (host.isBlank()) {
+                stringResource(R.string.proxy_subscription)
+            } else {
+                host
+            }
+            stringResource(R.string.proxy_subscription_host, safeHost)
         }
     }
 
@@ -727,10 +738,11 @@ private fun runtimeDiagnosticLabel(status: RuntimeUiStatus): String =
         is RuntimeUiStatus.Error -> stringResource(R.string.proxy_status_error)
     }
 
+@Composable
 private fun knownDelayText(delay: Int?): String? =
     when {
         delay == null -> null
-        delay < 0 -> "Failed"
+        delay < 0 -> stringResource(R.string.proxy_delay_failed)
         else -> "$delay ms"
     }
 
@@ -742,4 +754,22 @@ private fun formatBytes(bytes: Long): String {
         safe >= 1024L -> "%.1f KiB".format(safe / 1024.0)
         else -> "$safe B"
     }
+}
+
+
+@Composable
+private fun ProxyPanel(
+    modifier: Modifier = Modifier,
+    borderWidth: Dp = 1.dp,
+    content: @Composable () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(modifier),
+        shape = RoundedCornerShape(7.dp),
+        border = BorderStroke(borderWidth, MaterialTheme.colors.onBackground),
+        elevation = 0.dp,
+        content = content,
+    )
 }
