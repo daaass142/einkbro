@@ -6,6 +6,11 @@ import info.plateaukao.einkbro.core.mihomo.runtime.MihomoSessionManager
 import info.plateaukao.einkbro.core.network.BrowserNetworkGateway
 import info.plateaukao.einkbro.core.network.BrowserProxyEndpoint
 import info.plateaukao.einkbro.preference.ConfigManager
+import info.plateaukao.einkbro.preference.ProxyTransportMode
+import info.plateaukao.einkbro.proxy.vpn.StrictVpnController
+import info.plateaukao.einkbro.proxy.vpn.StrictVpnState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +35,8 @@ class MihomoBrowserCoordinator(
     private val config: ConfigManager,
     private val sessionManager: MihomoSessionManager,
     private val networkGateway: BrowserNetworkGateway,
+    private val strictVpn: StrictVpnController,
+    appScope: CoroutineScope,
 ) {
     private val mutex = Mutex()
     private val mutableState =
@@ -38,6 +45,21 @@ class MihomoBrowserCoordinator(
     val state: StateFlow<MihomoBrowserState> = mutableState.asStateFlow()
 
     private var temporaryDirect = false
+
+    init {
+        appScope.launch {
+            strictVpn.state.collect { state ->
+                if (
+                    config.proxy.enabled &&
+                    config.proxy.transportMode == ProxyTransportMode.STRICT_VPN &&
+                    state !is StrictVpnState.Running &&
+                    state !is StrictVpnState.Starting
+                ) {
+                    runCatching { networkGateway.block() }
+                }
+            }
+        }
+    }
 
     suspend fun ensureReady(): MihomoBrowserState = mutex.withLock {
         if (temporaryDirect) {
@@ -73,12 +95,23 @@ class MihomoBrowserCoordinator(
                 path = path,
             )
             val session = sessionManager.start(profile)
-            networkGateway.enableProxy(
-                BrowserProxyEndpoint(
-                    host = session.socksEndpoint.host,
-                    port = session.socksEndpoint.port,
-                )
-            )
+            when (config.proxy.transportMode) {
+                ProxyTransportMode.BROWSER_PROXY -> {
+                    strictVpn.stop()
+                    networkGateway.enableProxy(
+                        BrowserProxyEndpoint(
+                            host = session.socksEndpoint.host,
+                            port = session.socksEndpoint.port,
+                        )
+                    )
+                }
+                ProxyTransportMode.STRICT_VPN -> {
+                    networkGateway.block()
+                    strictVpn.start()
+                    strictVpn.awaitRunning()
+                    networkGateway.enableDirect()
+                }
+            }
             MihomoBrowserState.Proxied(session).also { mutableState.value = it }
         } catch (error: Throwable) {
             runCatching { networkGateway.block() }
@@ -89,6 +122,7 @@ class MihomoBrowserCoordinator(
 
     suspend fun useDirectTemporarily() = mutex.withLock {
         temporaryDirect = true
+        strictVpn.stop()
         networkGateway.enableDirect()
         mutableState.value = MihomoBrowserState.Direct
     }
@@ -97,6 +131,7 @@ class MihomoBrowserCoordinator(
         mutex.withLock {
             temporaryDirect = false
             runCatching { networkGateway.block() }
+            strictVpn.stop()
             runCatching { sessionManager.stop() }
             mutableState.value = MihomoBrowserState.Unprepared
         }
@@ -105,6 +140,7 @@ class MihomoBrowserCoordinator(
 
     suspend fun disableProxy() = mutex.withLock {
         temporaryDirect = false
+        strictVpn.stop()
         runCatching { sessionManager.stop() }
         networkGateway.enableDirect()
         mutableState.value = MihomoBrowserState.Direct

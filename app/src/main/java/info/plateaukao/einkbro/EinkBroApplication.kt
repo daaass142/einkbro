@@ -25,6 +25,7 @@ import info.plateaukao.einkbro.browser.Javascript
 import info.plateaukao.einkbro.database.BookmarkManager
 import info.plateaukao.einkbro.database.RecordRepository
 import info.plateaukao.einkbro.core.mihomo.api.MihomoEngine
+import info.plateaukao.einkbro.core.mihomo.api.MihomoTunController
 import info.plateaukao.einkbro.core.mihomo.runtime.LibMihomoEngine
 import info.plateaukao.einkbro.core.mihomo.runtime.MihomoSessionManager
 import info.plateaukao.einkbro.core.network.AndroidWebViewProxyAdapter
@@ -32,6 +33,8 @@ import info.plateaukao.einkbro.core.network.BrowserNetworkGateway
 import info.plateaukao.einkbro.core.network.BrowserNetworkGatewayImpl
 import info.plateaukao.einkbro.proxy.MihomoBrowserCoordinator
 import info.plateaukao.einkbro.proxy.ProxyViewModel
+import info.plateaukao.einkbro.proxy.vpn.StrictVpnController
+import info.plateaukao.einkbro.proxy.vpn.StrictVpnRuntime
 import info.plateaukao.einkbro.core.mihomo.profile.ProfileRepository
 import info.plateaukao.einkbro.core.mihomo.profile.SubscriptionUpdater
 import info.plateaukao.einkbro.preference.ConfigManager
@@ -99,13 +102,16 @@ class EinkBroApplication : Application() {
         single { SearchSuggestionViewModel() }
         single { LibMihomoEngine.create(androidContext()) }
         single<MihomoEngine> { get<LibMihomoEngine>() }
+        single<MihomoTunController> { get<LibMihomoEngine>() }
         single { MihomoSessionManager.create(androidContext(), get()) }
         single { ProfileRepository.create(androidContext()) }
         single { SubscriptionUpdater.create(androidContext(), get()) }
         single<BrowserNetworkGateway> {
             BrowserNetworkGatewayImpl(AndroidWebViewProxyAdapter(androidContext()))
         }
-        single { MihomoBrowserCoordinator(get(), get(), get()) }
+        single { StrictVpnRuntime() }
+        single { StrictVpnController(androidContext(), get()) }
+        single { MihomoBrowserCoordinator(get(), get(), get(), get(), get()) }
         viewModel { ProxyViewModel(get(), get(), get(), get(), get(), get()) }
         viewModel { TranslationViewModel(get(), get()) }
         viewModel { TtsViewModel(get(), get(), get()) }

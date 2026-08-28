@@ -39,6 +39,8 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
@@ -278,6 +280,18 @@
             android:name=".service.ShareChosenReceiver"
             android:exported="false" />
 
+        <service
+            android:name=".proxy.vpn.MihomoVpnService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Application-only VPN for embedded browser traffic through Mihomo" />
+        </service>
         <service
             android:name=".service.ClearService"
             android:icon="@mipmap/ic_launcher"
