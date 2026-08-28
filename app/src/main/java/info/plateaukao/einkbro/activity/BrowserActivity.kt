@@ -1013,6 +1013,10 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
         super.onResume()
         displayConfigDelegate.onResume()
         if (config.restartChanged) { config.restartChanged = false; dialogManager.showRestartConfirmDialog() }
+        if (!browserPostNetworkInitialized || !browserState.isWebViewInitialized) {
+            disablePendingTransitions()
+            return
+        }
         statusbarViewController.refresh()
         if (!binding.appBar.isVisible) statusbarViewController.show() else statusbarViewController.hide()
         updateTitle()

@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import info.plateaukao.einkbro.BuildConfig
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.core.mihomo.api.ProxyGroup
 import info.plateaukao.einkbro.core.mihomo.api.RoutingMode
@@ -265,6 +266,21 @@ fun ProxySettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.proxy_open_dashboard))
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        stringResource(R.string.proxy_component_versions),
+                        style = MaterialTheme.typography.subtitle1,
+                    )
+                    Text("libmihomo " + BuildConfig.LIBMIHOMO_VERSION)
+                    Text("mihomo " + BuildConfig.MIHOMO_CORE_VERSION)
+                    Text("bridgeABI " + BuildConfig.MIHOMO_BRIDGE_ABI)
+                    Text("Zashboard " + BuildConfig.ZASHBOARD_VERSION)
                 }
             }
         }

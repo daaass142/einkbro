@@ -12,6 +12,7 @@ import info.plateaukao.einkbro.core.mihomo.profile.ProfileRepository
 import info.plateaukao.einkbro.core.mihomo.profile.ProfileSourceType
 import info.plateaukao.einkbro.core.mihomo.profile.SubscriptionUpdater
 import info.plateaukao.einkbro.core.mihomo.runtime.MihomoSessionManager
+import info.plateaukao.einkbro.core.mihomo.security.SensitiveValueRedactor
 import info.plateaukao.einkbro.preference.ConfigManager
 import info.plateaukao.einkbro.preference.ProxyTransportMode
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -221,7 +222,9 @@ class ProxyViewModel(
                 block()
             } catch (error: Throwable) {
                 mutableState.value = mutableState.value.copy(
-                    error = error.message ?: error.javaClass.simpleName
+                    error = SensitiveValueRedactor.redactUrl(
+                        error.message ?: error.javaClass.simpleName
+                    )
                 )
             } finally {
                 mutableState.value = mutableState.value.copy(busy = false)
