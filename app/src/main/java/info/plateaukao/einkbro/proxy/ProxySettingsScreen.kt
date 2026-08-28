@@ -6,48 +6,24 @@ import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.AlertDialog
-import androidx.compose.material.Button
-import androidx.compose.material.Card
-import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.RadioButton
-import androidx.compose.material.Switch
-import androidx.compose.material.Text
-import androidx.compose.material.TextButton
-import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import info.plateaukao.einkbro.BuildConfig
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.core.mihomo.api.ProxyGroup
-import info.plateaukao.einkbro.core.mihomo.api.RoutingMode
 import info.plateaukao.einkbro.core.mihomo.profile.ProfileRecord
-import info.plateaukao.einkbro.core.mihomo.profile.ProfileSourceType
 import info.plateaukao.einkbro.preference.ProxyTransportMode
 import java.io.ByteArrayOutputStream
-import java.net.URI
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,13 +36,18 @@ fun ProxySettingsScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
     var showSubscriptionDialog by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<ProfileRecord?>(null) }
+    var nodePickerGroup by remember { mutableStateOf<ProxyGroup?>(null) }
 
     val vpnPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             viewModel.setTransportMode(ProxyTransportMode.STRICT_VPN)
+        } else {
+            viewModel.reportVpnPermissionDenied()
         }
     }
 
@@ -75,7 +56,7 @@ fun ProxySettingsScreen(
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
-            runCatching {
+            try {
                 val yaml = withContext(Dispatchers.IO) {
                     readProfile(context.contentResolver, uri)
                 }
@@ -85,215 +66,94 @@ fun ProxySettingsScreen(
                     .orEmpty()
                     .ifBlank { context.getString(R.string.proxy_local_profile) }
                 viewModel.importLocal(name, yaml)
+            } catch (error: Throwable) {
+                viewModel.reportExternalError(error, ProxyErrorCategory.PROFILE)
             }
-        }
-    }
-
-    LaunchedEffect(state.enabled, state.activeProfileId) {
-        if (state.enabled && state.activeProfileId.isNotBlank()) {
-            viewModel.refreshRuntime()
         }
     }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            SettingToggleCard(
-                title = stringResource(R.string.proxy_enable),
-                summary = stringResource(R.string.proxy_enable_summary),
-                checked = state.enabled,
-                onChecked = viewModel::setEnabled,
+            RuntimeStatusCard(
+                state = state,
+                onRetry = viewModel::retryProxy,
+                onDirectOnce = viewModel::useDirectOnce,
             )
         }
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(
-                        stringResource(R.string.proxy_transport),
-                        style = MaterialTheme.typography.subtitle1,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = state.transportMode == ProxyTransportMode.BROWSER_PROXY,
-                            onClick = {
-                                viewModel.setTransportMode(ProxyTransportMode.BROWSER_PROXY)
-                            },
-                        )
-                        Text(stringResource(R.string.proxy_transport_browser))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = state.transportMode == ProxyTransportMode.STRICT_VPN,
-                            onClick = {
-                                val permission = VpnService.prepare(context)
-                                if (permission == null) {
-                                    viewModel.setTransportMode(ProxyTransportMode.STRICT_VPN)
-                                } else {
-                                    vpnPermission.launch(permission)
-                                }
-                            },
-                        )
-                        Text(stringResource(R.string.proxy_transport_strict))
-                    }
-                }
-            }
+            EnableProxyCard(state = state, onEnabledChange = viewModel::setEnabled)
         }
-
         item {
-            SettingToggleCard(
-                title = stringResource(R.string.proxy_fail_closed),
-                summary = stringResource(R.string.proxy_fail_closed_summary),
-                checked = state.failClosed,
-                onChecked = viewModel::setFailClosed,
+            TransportCard(
+                state = state,
+                onSelectBrowser = {
+                    viewModel.setTransportMode(ProxyTransportMode.BROWSER_PROXY)
+                },
+                onSelectStrictVpn = {
+                    val permission = VpnService.prepare(context)
+                    if (permission == null) {
+                        viewModel.setTransportMode(ProxyTransportMode.STRICT_VPN)
+                    } else {
+                        vpnPermission.launch(permission)
+                    }
+                },
             )
         }
+        item {
+            FailClosedCard(state = state, onCheckedChange = viewModel::setFailClosed)
+        }
 
-        if (state.error != null) {
+        state.error?.let { error ->
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(
-                            text = stringResource(R.string.proxy_error),
-                            style = MaterialTheme.typography.subtitle1,
-                        )
-                        Text(state.error.orEmpty())
-                        TextButton(onClick = viewModel::clearError) {
-                            Text(stringResource(android.R.string.ok))
-                        }
-                    }
-                }
+                ProxyErrorCard(error = error, onDismiss = viewModel::clearError)
             }
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = {
-                        profilePicker.launch(arrayOf("text/*", "application/yaml", "application/octet-stream"))
-                    }
-                ) {
-                    Text(stringResource(R.string.proxy_import_yaml))
-                }
-                Button(onClick = { showSubscriptionDialog = true }) {
-                    Text(stringResource(R.string.proxy_add_subscription))
-                }
-            }
-        }
-
-        item {
-            Text(
-                stringResource(R.string.proxy_profiles),
-                style = MaterialTheme.typography.h6,
+            ProfileSection(
+                state = state,
+                onImport = {
+                    profilePicker.launch(
+                        arrayOf("text/*", "application/yaml", "application/octet-stream")
+                    )
+                },
+                onAddSubscription = { showSubscriptionDialog = true },
+                onSelect = viewModel::activate,
+                onRefresh = viewModel::refreshSubscription,
+                onDeleteRequest = { pendingDelete = it },
             )
-        }
-
-        if (state.profiles.isEmpty()) {
-            item { Text(stringResource(R.string.proxy_no_profiles)) }
-        } else {
-            items(state.profiles, key = { it.id }) { profile ->
-                ProfileCard(
-                    profile = profile,
-                    selected = state.activeProfileId == profile.id,
-                    onSelect = { viewModel.activate(profile) },
-                    onRefresh = { viewModel.refreshSubscription(profile) },
-                    onDelete = { viewModel.delete(profile) },
-                )
-            }
         }
 
         if (state.enabled && state.activeProfileId.isNotBlank()) {
             item {
-                Text(
-                    stringResource(R.string.proxy_routing_mode),
-                    style = MaterialTheme.typography.h6,
+                RoutingModeCard(state = state, onMode = viewModel::setRoutingMode)
+            }
+            item {
+                TrafficCard(state = state, onRefresh = viewModel::refreshRuntime)
+            }
+            item {
+                ProxyGroupsSection(
+                    state = state,
+                    onOpenPicker = { nodePickerGroup = it },
+                    onTestDelay = viewModel::testDelay,
                 )
             }
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    RoutingMode.entries.forEach { mode ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = state.routingMode == mode,
-                                onClick = { viewModel.setRoutingMode(mode) },
-                            )
-                            Text(mode.name)
-                        }
-                    }
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        stringResource(
-                            R.string.proxy_traffic,
-                            formatBytes(state.traffic.downloadBytes),
-                            formatBytes(state.traffic.uploadBytes),
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = viewModel::refreshRuntime) {
-                        Text(stringResource(R.string.proxy_refresh))
-                    }
-                }
-            }
-
-            items(state.groups, key = { it.name }) { group ->
-                ProxyGroupCard(
-                    group = group,
-                    delays = state.delays,
-                    onSelect = { viewModel.selectProxy(group, it) },
-                    onDelay = viewModel::testDelay,
+                AdvancedDashboardCard(
+                    enabled = state.runtimeStatus is RuntimeUiStatus.ProtectedBrowserProxy ||
+                        state.runtimeStatus is RuntimeUiStatus.ProtectedStrictVpn,
+                    onOpen = onOpenDashboard,
                 )
-            }
-
-            item {
-                Button(
-                    onClick = onOpenDashboard,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.proxy_open_dashboard))
-                }
             }
         }
 
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(
-                        stringResource(R.string.proxy_component_versions),
-                        style = MaterialTheme.typography.subtitle1,
-                    )
-                    Text("libmihomo " + BuildConfig.LIBMIHOMO_VERSION)
-                    Text("mihomo " + BuildConfig.MIHOMO_CORE_VERSION)
-                    Text("bridgeABI " + BuildConfig.MIHOMO_BRIDGE_ABI)
-                    Text("Zashboard " + BuildConfig.ZASHBOARD_VERSION)
-                }
-            }
-        }
-
-        if (state.busy) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
+            DiagnosticsCard(state)
         }
     }
 
@@ -306,118 +166,29 @@ fun ProxySettingsScreen(
             },
         )
     }
-}
 
-@Composable
-private fun SettingToggleCard(
-    title: String,
-    summary: String,
-    checked: Boolean,
-    onChecked: (Boolean) -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.subtitle1)
-                Text(summary, style = MaterialTheme.typography.body2)
-            }
-            Switch(checked = checked, onCheckedChange = onChecked)
-        }
+    pendingDelete?.let { profile ->
+        DeleteProfileDialog(
+            profile = profile,
+            isActive = state.activeProfileId == profile.id,
+            onDismiss = { pendingDelete = null },
+            onConfirm = {
+                pendingDelete = null
+                viewModel.delete(profile)
+            },
+        )
     }
-}
 
-@Composable
-private fun ProfileCard(
-    profile: ProfileRecord,
-    selected: Boolean,
-    onSelect: () -> Unit,
-    onRefresh: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = selected, onClick = onSelect)
-                Column(Modifier.weight(1f)) {
-                    Text(profile.name, style = MaterialTheme.typography.subtitle1)
-                    Text(
-                        when (profile.sourceType) {
-                            ProfileSourceType.LOCAL -> stringResource(R.string.proxy_local_profile)
-                            ProfileSourceType.SUBSCRIPTION ->
-                                safeSubscriptionHost(profile.sourceUrl)
-                        },
-                        style = MaterialTheme.typography.body2,
-                    )
-                }
-            }
-            profile.lastError?.let {
-                Text(it, style = MaterialTheme.typography.caption)
-            }
-            Row {
-                if (profile.sourceType == ProfileSourceType.SUBSCRIPTION) {
-                    TextButton(onClick = onRefresh) {
-                        Text(stringResource(R.string.proxy_refresh_subscription))
-                    }
-                }
-                TextButton(onClick = onDelete) {
-                    Text(stringResource(R.string.proxy_delete))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProxyGroupCard(
-    group: ProxyGroup,
-    delays: Map<String, Int>,
-    onSelect: (String) -> Unit,
-    onDelay: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text(group.name, style = MaterialTheme.typography.subtitle1)
-            Text(group.selected ?: "-", style = MaterialTheme.typography.body2)
-            Row {
-                TextButton(onClick = { expanded = true }) {
-                    Text(stringResource(R.string.proxy_change_node))
-                }
-                group.selected?.let { selected ->
-                    TextButton(onClick = { onDelay(selected) }) {
-                        val delay = delays[selected]
-                        Text(
-                            if (delay == null) {
-                                stringResource(R.string.proxy_test_delay)
-                            } else if (delay < 0) {
-                                stringResource(R.string.proxy_delay_failed)
-                            } else {
-                                "${delay} ms"
-                            }
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                ) {
-                    group.proxies.forEach { name ->
-                        DropdownMenuItem(
-                            onClick = {
-                                expanded = false
-                                onSelect(name)
-                            }
-                        ) {
-                            Text(name)
-                        }
-                    }
-                }
-            }
-        }
+    nodePickerGroup?.let { group ->
+        NodePickerDialog(
+            group = group,
+            delays = state.delays,
+            onDismiss = { nodePickerGroup = null },
+            onSelect = { node ->
+                nodePickerGroup = null
+                viewModel.selectProxy(group, node)
+            },
+        )
     }
 }
 
@@ -429,54 +200,61 @@ private fun SubscriptionDialog(
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
 
-    AlertDialog(
+    androidx.compose.material.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.proxy_add_subscription)) },
+        title = {
+            androidx.compose.material.Text(
+                androidx.compose.ui.res.stringResource(R.string.proxy_add_subscription)
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextField(
+            androidx.compose.foundation.layout.Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                androidx.compose.material.TextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.proxy_profile_name)) },
+                    label = {
+                        androidx.compose.material.Text(
+                            androidx.compose.ui.res.stringResource(R.string.proxy_profile_name)
+                        )
+                    },
                     singleLine = true,
                 )
-                TextField(
+                androidx.compose.material.TextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text(stringResource(R.string.proxy_subscription_url)) },
+                    label = {
+                        androidx.compose.material.Text(
+                            androidx.compose.ui.res.stringResource(R.string.proxy_subscription_url)
+                        )
+                    },
                     singleLine = true,
+                )
+                androidx.compose.material.Text(
+                    androidx.compose.ui.res.stringResource(R.string.proxy_subscription_https_only),
+                    style = androidx.compose.material.MaterialTheme.typography.caption,
                 )
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = url.startsWith("https://"),
-                onClick = { onAdd(name, url) },
+            androidx.compose.material.TextButton(
+                enabled = url.trim().startsWith("https://", ignoreCase = true),
+                onClick = { onAdd(name.trim(), url.trim()) },
             ) {
-                Text(stringResource(R.string.proxy_add))
+                androidx.compose.material.Text(
+                    androidx.compose.ui.res.stringResource(R.string.proxy_add)
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.cancel))
+            androidx.compose.material.TextButton(onClick = onDismiss) {
+                androidx.compose.material.Text(
+                    androidx.compose.ui.res.stringResource(android.R.string.cancel)
+                )
             }
         },
     )
-}
-
-private fun safeSubscriptionHost(value: String?): String {
-    if (value.isNullOrBlank()) return "Subscription"
-    return runCatching { URI(value).host }.getOrNull().orEmpty().ifBlank { "Subscription" }
-}
-
-private fun formatBytes(bytes: Long): String {
-    val safe = bytes.coerceAtLeast(0)
-    return when {
-        safe >= 1024L * 1024L * 1024L -> "%.1f GiB".format(safe / (1024.0 * 1024.0 * 1024.0))
-        safe >= 1024L * 1024L -> "%.1f MiB".format(safe / (1024.0 * 1024.0))
-        safe >= 1024L -> "%.1f KiB".format(safe / 1024.0)
-        else -> "$safe B"
-    }
 }
 
 private fun readProfile(
@@ -492,7 +270,9 @@ private fun readProfile(
             val read = input.read(buffer)
             if (read < 0) break
             total += read
-            require(total <= 10 * 1024 * 1024) { "Profile is larger than 10 MiB" }
+            require(total <= 10 * 1024 * 1024) {
+                "Profile is larger than 10 MiB"
+            }
             output.write(buffer, 0, read)
         }
         return output.toString(Charsets.UTF_8.name())

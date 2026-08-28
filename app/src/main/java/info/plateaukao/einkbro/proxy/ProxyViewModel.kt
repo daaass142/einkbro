@@ -3,6 +3,7 @@ package info.plateaukao.einkbro.proxy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import info.plateaukao.einkbro.core.mihomo.api.MihomoEngine
+import info.plateaukao.einkbro.core.mihomo.api.MihomoException
 import info.plateaukao.einkbro.core.mihomo.api.MihomoProfile
 import info.plateaukao.einkbro.core.mihomo.api.ProxyGroup
 import info.plateaukao.einkbro.core.mihomo.api.RoutingMode
@@ -19,21 +20,71 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+sealed interface ProxyAction {
+    data object StartingRuntime : ProxyAction
+    data object StoppingRuntime : ProxyAction
+    data object SwitchingTransport : ProxyAction
+    data object ImportingProfile : ProxyAction
+    data object AddingSubscription : ProxyAction
+    data class ActivatingProfile(val profileId: String) : ProxyAction
+    data class RefreshingSubscription(val profileId: String) : ProxyAction
+    data class DeletingProfile(val profileId: String) : ProxyAction
+    data object ChangingRouting : ProxyAction
+    data class SwitchingNode(val groupName: String) : ProxyAction
+    data class TestingDelay(val proxyName: String) : ProxyAction
+    data object RefreshingRuntime : ProxyAction
+    data object RetryingRuntime : ProxyAction
+    data object EnteringTemporaryDirect : ProxyAction
+}
+
+sealed interface RuntimeUiStatus {
+    data object Off : RuntimeUiStatus
+    data object Starting : RuntimeUiStatus
+    data class ProtectedBrowserProxy(val profileName: String) : RuntimeUiStatus
+    data class ProtectedStrictVpn(val profileName: String) : RuntimeUiStatus
+    data class Blocked(val reason: String?) : RuntimeUiStatus
+    data object TemporaryDirect : RuntimeUiStatus
+    data class Error(val reason: String?) : RuntimeUiStatus
+}
+
+enum class ProxyErrorCategory {
+    PROFILE_REQUIRED,
+    PROFILE,
+    SUBSCRIPTION,
+    APP_INCOMPATIBLE,
+    VPN_PERMISSION,
+    RUNTIME,
+    UNKNOWN,
+}
+
+data class ProxyUiError(
+    val category: ProxyErrorCategory,
+    val message: String,
+)
 
 data class ProxyUiState(
     val enabled: Boolean = false,
     val failClosed: Boolean = true,
     val transportMode: ProxyTransportMode = ProxyTransportMode.BROWSER_PROXY,
+    val runtimeStatus: RuntimeUiStatus = RuntimeUiStatus.Off,
     val activeProfileId: String = "",
     val profiles: List<ProfileRecord> = emptyList(),
     val routingMode: RoutingMode = RoutingMode.RULE,
     val groups: List<ProxyGroup> = emptyList(),
     val traffic: TrafficSnapshot = TrafficSnapshot(0, 0),
     val delays: Map<String, Int> = emptyMap(),
-    val busy: Boolean = false,
-    val error: String? = null,
-)
+    val currentAction: ProxyAction? = null,
+    val error: ProxyUiError? = null,
+) {
+    val activeProfile: ProfileRecord?
+        get() = profiles.firstOrNull { it.id == activeProfileId }
+
+    val primarySelectedProxy: String?
+        get() = groups.firstOrNull()?.selected
+}
 
 class ProxyViewModel(
     private val config: ConfigManager,
@@ -49,65 +100,119 @@ class ProxyViewModel(
             failClosed = config.proxy.failClosed,
             transportMode = config.proxy.transportMode,
             activeProfileId = config.proxy.activeProfileId,
+            runtimeStatus = runtimeStatus(coordinator.state.value),
         )
     )
+
     val state: StateFlow<ProxyUiState> = mutableState.asStateFlow()
 
     init {
         viewModelScope.launch {
             profiles.profiles.collectLatest { records ->
-                mutableState.value = mutableState.value.copy(
-                    profiles = records,
-                    enabled = config.proxy.enabled,
-                    failClosed = config.proxy.failClosed,
-                    transportMode = config.proxy.transportMode,
-                    activeProfileId = config.proxy.activeProfileId,
-                )
+                mutableState.update {
+                    it.copy(
+                        profiles = records,
+                        enabled = config.proxy.enabled,
+                        failClosed = config.proxy.failClosed,
+                        transportMode = config.proxy.transportMode,
+                        activeProfileId = config.proxy.activeProfileId,
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            coordinator.state.collectLatest { browserState ->
+                mutableState.update {
+                    it.copy(
+                        enabled = config.proxy.enabled,
+                        transportMode = config.proxy.transportMode,
+                        runtimeStatus = runtimeStatus(browserState),
+                    )
+                }
             }
         }
     }
 
-    fun setEnabled(enabled: Boolean) = launchBusy {
+    fun setEnabled(enabled: Boolean) = launchAction(
+        action = if (enabled) ProxyAction.StartingRuntime else ProxyAction.StoppingRuntime,
+        defaultError = ProxyErrorCategory.RUNTIME,
+    ) {
         if (enabled) {
             require(config.proxy.activeProfileId.isNotBlank()) {
                 "Import or select a profile before enabling Mihomo"
             }
             config.proxy.enabled = true
+            mutableState.update { it.copy(enabled = true, runtimeStatus = RuntimeUiStatus.Starting) }
             coordinator.restartProxy()
+            refreshRuntimeInternal()
         } else {
             config.proxy.enabled = false
             coordinator.disableProxy()
+            mutableState.update {
+                it.copy(
+                    enabled = false,
+                    groups = emptyList(),
+                    runtimeStatus = RuntimeUiStatus.Off,
+                )
+            }
         }
-        mutableState.value = mutableState.value.copy(enabled = enabled)
-        if (enabled) refreshRuntimeInternal()
     }
 
-    fun setTransportMode(mode: ProxyTransportMode) = launchBusy {
+    fun setTransportMode(mode: ProxyTransportMode) = launchAction(
+        ProxyAction.SwitchingTransport,
+        ProxyErrorCategory.RUNTIME,
+    ) {
         config.proxy.transportMode = mode
-        mutableState.value = mutableState.value.copy(transportMode = mode)
-        if (config.proxy.enabled) coordinator.restartProxy()
+        mutableState.update {
+            it.copy(
+                transportMode = mode,
+                runtimeStatus = if (config.proxy.enabled) RuntimeUiStatus.Starting else it.runtimeStatus,
+            )
+        }
+        if (config.proxy.enabled) {
+            coordinator.restartProxy()
+            refreshRuntimeInternal()
+        }
     }
 
     fun setFailClosed(value: Boolean) {
         config.proxy.failClosed = value
-        mutableState.value = mutableState.value.copy(failClosed = value)
+        mutableState.update {
+            it.copy(
+                failClosed = value,
+                runtimeStatus = runtimeStatus(coordinator.state.value),
+            )
+        }
     }
 
-    fun importLocal(name: String, yaml: String) = launchBusy {
+    fun importLocal(name: String, yaml: String) = launchAction(
+        ProxyAction.ImportingProfile,
+        ProxyErrorCategory.PROFILE,
+    ) {
         val profile = profiles.importLocal(name, yaml)
         activateInternal(profile)
     }
 
-    fun addSubscription(name: String, url: String) = launchBusy {
+    fun addSubscription(name: String, url: String) = launchAction(
+        ProxyAction.AddingSubscription,
+        ProxyErrorCategory.SUBSCRIPTION,
+    ) {
         val profile = subscriptions.create(name, url)
         activateInternal(profile)
     }
 
-    fun activate(profile: ProfileRecord) = launchBusy {
+    fun activate(profile: ProfileRecord) = launchAction(
+        ProxyAction.ActivatingProfile(profile.id),
+        ProxyErrorCategory.PROFILE,
+    ) {
         activateInternal(profile)
     }
 
-    fun delete(profile: ProfileRecord) = launchBusy {
+    fun delete(profile: ProfileRecord) = launchAction(
+        ProxyAction.DeletingProfile(profile.id),
+        ProxyErrorCategory.PROFILE,
+    ) {
         if (config.proxy.activeProfileId == profile.id) {
             config.proxy.enabled = false
             config.proxy.activeProfileId = ""
@@ -115,26 +220,30 @@ class ProxyViewModel(
             coordinator.disableProxy()
         }
         profiles.delete(profile.id)
-        mutableState.value = mutableState.value.copy(
-            enabled = config.proxy.enabled,
-            activeProfileId = config.proxy.activeProfileId,
-        )
+        mutableState.update {
+            it.copy(
+                enabled = config.proxy.enabled,
+                activeProfileId = config.proxy.activeProfileId,
+                groups = if (config.proxy.enabled) it.groups else emptyList(),
+                runtimeStatus = runtimeStatus(coordinator.state.value),
+            )
+        }
     }
 
-    fun refreshSubscription(profile: ProfileRecord) = launchBusy {
+    fun refreshSubscription(profile: ProfileRecord) = launchAction(
+        ProxyAction.RefreshingSubscription(profile.id),
+        ProxyErrorCategory.SUBSCRIPTION,
+    ) {
         require(profile.sourceType == ProfileSourceType.SUBSCRIPTION)
         val staged = subscriptions.stageRefresh(profile.id)
         val isActive = config.proxy.activeProfileId == profile.id
 
         if (!isActive || !config.proxy.enabled) {
             profiles.commit(staged)
-            return@launchBusy
+            return@launchAction
         }
 
         try {
-            // Test the candidate as a real embedded mihomo session before it can
-            // replace source.yaml. The current WebView proxy remains on the old
-            // endpoint and therefore fails closed during the short switch.
             sessionManager.reload(
                 MihomoProfile(
                     id = profile.id,
@@ -149,48 +258,96 @@ class ProxyViewModel(
         } catch (error: Throwable) {
             profiles.discard(staged)
             profiles.markError(profile.id, error.message)
-            // source.yaml is untouched, so restore the known profile/session.
             runCatching { coordinator.restartProxy() }
             throw error
         }
     }
 
-    fun setRoutingMode(mode: RoutingMode) = launchBusy {
+    fun setRoutingMode(mode: RoutingMode) = launchAction(
+        ProxyAction.ChangingRouting,
+        ProxyErrorCategory.RUNTIME,
+    ) {
         engine.updateConfig(
             "{\"mode\":\"${mode.name.lowercase()}\"}"
         )
-        mutableState.value = mutableState.value.copy(routingMode = mode)
+        mutableState.update { it.copy(routingMode = mode) }
     }
 
-    fun selectProxy(group: ProxyGroup, proxyName: String) = launchBusy {
+    fun selectProxy(group: ProxyGroup, proxyName: String) = launchAction(
+        ProxyAction.SwitchingNode(group.name),
+        ProxyErrorCategory.RUNTIME,
+    ) {
         engine.changeProxy(group.name, proxyName)
         refreshRuntimeInternal()
     }
 
-    fun testDelay(proxyName: String) = launchBusy {
+    fun testDelay(proxyName: String) = launchAction(
+        ProxyAction.TestingDelay(proxyName),
+        ProxyErrorCategory.RUNTIME,
+    ) {
         val delay = engine.testDelay(
             proxyName = proxyName,
             testUrl = DEFAULT_DELAY_URL,
             timeoutMs = 5_000,
         )
-        mutableState.value = mutableState.value.copy(
-            delays = mutableState.value.delays + (proxyName to delay)
-        )
+        mutableState.update {
+            it.copy(delays = it.delays + (proxyName to delay))
+        }
     }
 
-    fun refreshRuntime() = launchBusy {
+    fun refreshRuntime() = launchAction(
+        ProxyAction.RefreshingRuntime,
+        ProxyErrorCategory.RUNTIME,
+    ) {
         refreshRuntimeInternal()
     }
 
+    fun retryProxy() = launchAction(
+        ProxyAction.RetryingRuntime,
+        ProxyErrorCategory.RUNTIME,
+    ) {
+        check(config.proxy.enabled) { "Enable Mihomo before retrying the proxy" }
+        mutableState.update { it.copy(runtimeStatus = RuntimeUiStatus.Starting) }
+        coordinator.restartProxy()
+        refreshRuntimeInternal()
+    }
+
+    fun useDirectOnce() = launchAction(
+        ProxyAction.EnteringTemporaryDirect,
+        ProxyErrorCategory.RUNTIME,
+    ) {
+        coordinator.useDirectTemporarily()
+        mutableState.update { it.copy(runtimeStatus = RuntimeUiStatus.TemporaryDirect) }
+    }
+
+    fun reportExternalError(
+        error: Throwable,
+        category: ProxyErrorCategory = ProxyErrorCategory.UNKNOWN,
+    ) {
+        mutableState.update { it.copy(error = mapError(error, category)) }
+    }
+
+    fun reportVpnPermissionDenied() {
+        mutableState.update {
+            it.copy(
+                error = ProxyUiError(
+                    ProxyErrorCategory.VPN_PERMISSION,
+                    "Android VPN permission was not granted. The previous transport remains active.",
+                )
+            )
+        }
+    }
+
     fun clearError() {
-        mutableState.value = mutableState.value.copy(error = null)
+        mutableState.update { it.copy(error = null) }
     }
 
     private suspend fun activateInternal(profile: ProfileRecord) {
         config.proxy.activeProfileId = profile.id
         config.proxy.activeProfilePath = profile.filePath
-        mutableState.value = mutableState.value.copy(activeProfileId = profile.id)
+        mutableState.update { it.copy(activeProfileId = profile.id) }
         if (config.proxy.enabled) {
+            mutableState.update { it.copy(runtimeStatus = RuntimeUiStatus.Starting) }
             coordinator.restartProxy()
             refreshRuntimeInternal()
         }
@@ -198,7 +355,7 @@ class ProxyViewModel(
 
     private suspend fun refreshRuntimeInternal() {
         if (!config.proxy.enabled) {
-            mutableState.value = mutableState.value.copy(groups = emptyList())
+            mutableState.update { it.copy(groups = emptyList()) }
             return
         }
 
@@ -209,27 +366,99 @@ class ProxyViewModel(
             compareBy<ProxyGroup> { rank[it.name] ?: Int.MAX_VALUE }
                 .thenBy { it.name.lowercase() }
         )
-        mutableState.value = mutableState.value.copy(
-            groups = groups,
-            traffic = engine.getTraffic(),
-        )
+        mutableState.update {
+            it.copy(
+                groups = groups,
+                traffic = engine.getTraffic(),
+            )
+        }
     }
 
-    private fun launchBusy(block: suspend () -> Unit) {
+    private fun launchAction(
+        action: ProxyAction,
+        defaultError: ProxyErrorCategory,
+        block: suspend () -> Unit,
+    ) {
         viewModelScope.launch {
-            mutableState.value = mutableState.value.copy(busy = true, error = null)
+            mutableState.update { it.copy(currentAction = action, error = null) }
             try {
                 block()
             } catch (error: Throwable) {
-                mutableState.value = mutableState.value.copy(
-                    error = SensitiveValueRedactor.redactUrl(
-                        error.message ?: error.javaClass.simpleName
+                mutableState.update {
+                    it.copy(
+                        error = mapError(error, defaultError),
+                        runtimeStatus = runtimeStatus(coordinator.state.value),
                     )
-                )
+                }
             } finally {
-                mutableState.value = mutableState.value.copy(busy = false)
+                mutableState.update { it.copy(currentAction = null) }
             }
         }
+    }
+
+    private fun runtimeStatus(browserState: MihomoBrowserState): RuntimeUiStatus =
+        when (browserState) {
+            MihomoBrowserState.Unprepared ->
+                if (config.proxy.enabled) RuntimeUiStatus.Starting else RuntimeUiStatus.Off
+
+            MihomoBrowserState.Preparing ->
+                RuntimeUiStatus.Starting
+
+            MihomoBrowserState.Direct ->
+                if (config.proxy.enabled) RuntimeUiStatus.TemporaryDirect else RuntimeUiStatus.Off
+
+            is MihomoBrowserState.Proxied ->
+                when (config.proxy.transportMode) {
+                    ProxyTransportMode.BROWSER_PROXY ->
+                        RuntimeUiStatus.ProtectedBrowserProxy(browserState.session.profile.name)
+
+                    ProxyTransportMode.STRICT_VPN ->
+                        RuntimeUiStatus.ProtectedStrictVpn(browserState.session.profile.name)
+                }
+
+            is MihomoBrowserState.Failed -> {
+                val reason = SensitiveValueRedactor.redactUrl(
+                    browserState.error.message ?: browserState.error.javaClass.simpleName
+                )
+                if (config.proxy.enabled && config.proxy.failClosed) {
+                    RuntimeUiStatus.Blocked(reason)
+                } else {
+                    RuntimeUiStatus.Error(reason)
+                }
+            }
+        }
+
+    private fun mapError(
+        error: Throwable,
+        defaultCategory: ProxyErrorCategory,
+    ): ProxyUiError {
+        val category = when (error) {
+            is MihomoException.NativeLoadFailure,
+            is MihomoException.BridgeAbiMismatch,
+            -> ProxyErrorCategory.APP_INCOMPATIBLE
+
+            is MihomoException.InvalidProfile -> ProxyErrorCategory.PROFILE
+            is SecurityException -> ProxyErrorCategory.VPN_PERMISSION
+            is IllegalArgumentException,
+            is IllegalStateException,
+            -> if (
+                error.message.orEmpty().contains("profile", ignoreCase = true) &&
+                error.message.orEmpty().contains("enable", ignoreCase = true)
+            ) {
+                ProxyErrorCategory.PROFILE_REQUIRED
+            } else {
+                defaultCategory
+            }
+
+            else -> defaultCategory
+        }
+
+        return ProxyUiError(
+            category = category,
+            message = SensitiveValueRedactor.redactUrl(
+                error.message ?: error.javaClass.simpleName
+            ),
+        )
     }
 
     private companion object {
