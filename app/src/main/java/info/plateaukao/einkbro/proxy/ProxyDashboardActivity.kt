@@ -22,8 +22,6 @@ import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.activity.BrowserActivity
 import info.plateaukao.einkbro.core.mihomo.runtime.MihomoSessionManager
 import info.plateaukao.einkbro.view.EBToast
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import org.koin.android.ext.android.inject
 
 class ProxyDashboardActivity : FragmentActivity() {
@@ -136,29 +134,12 @@ class ProxyDashboardActivity : FragmentActivity() {
         }
 
         webView.loadUrl(
-            dashboardUrl(
+            DashboardBootstrap.url(
                 host = session.controllerEndpoint.host,
                 port = session.controllerEndpoint.port,
                 secret = session.controllerEndpoint.secret,
             )
         )
-    }
-
-    private fun dashboardUrl(
-        host: String,
-        port: Int,
-        secret: String,
-    ): String {
-        fun encode(value: String): String =
-            URLEncoder.encode(value, StandardCharsets.UTF_8.name())
-
-        return "http://${DashboardNavigationPolicy.APP_ASSET_HOST}/zashboard/index.html#/setup" +
-            "?protocol=http" +
-            "&hostname=${encode(host)}" +
-            "&port=$port" +
-            "&secret=${encode(secret)}" +
-            "&disableUpgradeCore=1" +
-            "&disableTunMode=1"
     }
 
     private fun openAsBrowserTab(uri: Uri) {
