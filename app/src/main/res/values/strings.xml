@@ -756,4 +756,5 @@
     <string name="proxy_subscription_url">HTTPS subscription URL</string>
     <string name="proxy_add">Add</string>
 
-    <string name="proxy_dashboard_not_ready">Zashboard assets are not ready yet.</string>\n</resources>
+    <string name="proxy_dashboard_not_ready">Zashboard assets are not ready yet.</string>\n    <string name="proxy_dashboard_requires_running">Start Mihomo before opening Zashboard.</string>
+</resources>

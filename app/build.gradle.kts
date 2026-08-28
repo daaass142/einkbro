@@ -1,3 +1,5 @@
+import buildlogic.VerifiedDownloadTask
+import org.gradle.api.tasks.Sync
 import com.android.build.api.variant.BuildConfigField
 import java.io.FileInputStream
 import java.text.SimpleDateFormat
@@ -18,6 +20,29 @@ plugins {
 val libmihomoAar = project(":core-mihomo").layout.buildDirectory.file(
     "third-party/libmihomo-android.aar"
 )
+
+val mihomoDependencyProperties = Properties().apply {
+    rootProject.file("gradle/mihomo-dependencies.properties").inputStream().use(::load)
+}
+val zashboardVersion = requireNotNull(mihomoDependencyProperties.getProperty("zashboard.version"))
+val zashboardSha256 = requireNotNull(mihomoDependencyProperties.getProperty("zashboard.sha256"))
+val zashboardZip = layout.buildDirectory.file("third-party/zashboard-dist-no-fonts.zip")
+val generatedZashboardAssets = layout.buildDirectory.dir("generated/zashboard-assets")
+
+val fetchZashboard = tasks.register<VerifiedDownloadTask>("fetchZashboard") {
+    sourceUrl.set(
+        "https://github.com/Zephyruso/zashboard/releases/download/" +
+            "v$zashboardVersion/dist-no-fonts.zip"
+    )
+    expectedSha256.set(zashboardSha256)
+    outputFile.set(zashboardZip)
+}
+
+val unpackZashboard = tasks.register<Sync>("unpackZashboard") {
+    dependsOn(fetchZashboard)
+    from({ zipTree(zashboardZip.get().asFile) })
+    into(generatedZashboardAssets.map { it.dir("zashboard") })
+}
 
 // A ValueSource so the timestamp is (re)computed on every build, even when the
 // configuration cache is reused — a plain config-time value gets frozen into the
@@ -85,6 +110,22 @@ android {
             "com.googleusercontent.apps." + driveOAuthClientId.removeSuffix(".apps.googleusercontent.com")
         buildConfigField("String", "DRIVE_OAUTH_CLIENT_ID", "\"$driveOAuthClientId\"")
         buildConfigField("String", "DRIVE_OAUTH_REDIRECT", "\"$driveOAuthScheme:/oauth2redirect\"")
+        buildConfigField(
+            "String",
+            "LIBMIHOMO_VERSION",
+            "\"${mihomoDependencyProperties.getProperty("libmihomo.version")}\"",
+        )
+        buildConfigField(
+            "String",
+            "MIHOMO_CORE_VERSION",
+            "\"${mihomoDependencyProperties.getProperty("libmihomo.mihomoVersion")}\"",
+        )
+        buildConfigField(
+            "int",
+            "MIHOMO_BRIDGE_ABI",
+            mihomoDependencyProperties.getProperty("libmihomo.bridgeAbi"),
+        )
+        buildConfigField("String", "ZASHBOARD_VERSION", "\"$zashboardVersion\"")
 
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
@@ -138,6 +179,10 @@ android {
         buildConfig = true
         viewBinding = true
         compose = true
+    }
+
+    sourceSets {
+        getByName("main").assets.srcDir(generatedZashboardAssets)
     }
 
     compileOptions {
@@ -340,4 +385,9 @@ dependencies {
 
     // media session for TTS notification
     implementation(libs.androidx.media)
+}
+
+
+tasks.named("preBuild").configure {
+    dependsOn(unpackZashboard)
 }

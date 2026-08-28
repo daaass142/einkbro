@@ -104,6 +104,11 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".proxy.ProxyDashboardActivity"
+            android:exported="false"
+            android:label="@string/setting_title_proxy"
+            android:theme="@style/AppTheme" />
+        <activity
             android:name=".activity.SettingActivity"
             android:exported="false"
             android:label="@string/title_activity_setting"
