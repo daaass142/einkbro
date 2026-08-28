@@ -833,4 +833,8 @@
     <string name="proxy_action_retrying">Retrying Mihomo…</string>
     <string name="proxy_action_direct_once">Switching to temporary direct…</string>
 
+    <string name="proxy_vpn_permission_denied_message">Android VPN permission was not granted. The previous transport remains active.</string>
+    <string name="proxy_profile_required_message">Import or select a profile before enabling Mihomo.</string>
+    <string name="proxy_dashboard_loading">Opening local Zashboard…</string>
+    <string name="proxy_dashboard_load_failed">Zashboard could not be loaded from the bundled app assets.</string>
 </resources>
