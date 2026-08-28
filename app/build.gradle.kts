@@ -182,7 +182,7 @@ android {
             isEnable = !isBuildingBundle
             reset()
             val abis = (project.findProperty("buildAbis") as String?)?.split(",")
-                ?: listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+                ?: listOf("armeabi-v7a", "arm64-v8a", "x86_64")
             include(*abis.toTypedArray())
             // Only emit the universal APK when explicitly requested (`-PuniversalApk`).
             // Skipping it saves a full packaging pass for local iteration; the release
