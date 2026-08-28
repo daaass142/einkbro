@@ -58,7 +58,7 @@ class MihomoSessionManager private constructor(
         } catch (error: Throwable) {
             return@withLock fail(
                 profile,
-                MihomoException.InvalidProfile("Unable to read profile", error),
+                MihomoException.RuntimeFailure("Unable to read mihomo profile", error),
             )
         }
 
