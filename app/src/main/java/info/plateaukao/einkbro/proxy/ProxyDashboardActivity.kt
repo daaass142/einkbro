@@ -101,20 +101,20 @@ class ProxyDashboardActivity : FragmentActivity() {
                 view: WebView,
                 request: WebResourceRequest,
             ): Boolean {
-                val uri = request.url
-                if (uri.scheme == "about") return false
-                if (uri.scheme == "http" && uri.host == APP_ASSET_HOST) return false
-                if (uri.host == "127.0.0.1" || uri.host == "localhost") {
-                    // Controller requests belong to XHR/WebSocket. Never turn a
-                    // loopback controller navigation into a normal browser tab.
-                    return true
+                return when (
+                    DashboardNavigationPolicy.classify(request.url.toString())
+                ) {
+                    DashboardNavigationAction.ALLOW_INTERNAL -> false
+                    DashboardNavigationAction.BLOCK_LOOPBACK -> true
+                    DashboardNavigationAction.OPEN_EXTERNAL -> {
+                        openAsBrowserTab(request.url)
+                        true
+                    }
                 }
-                openAsBrowserTab(uri)
-                return true
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                if (Uri.parse(url).host == APP_ASSET_HOST) {
+                if (Uri.parse(url).host == DashboardNavigationPolicy.APP_ASSET_HOST) {
                     loadingView.visibility = View.GONE
                 }
                 // The setup URL contains the controller secret in its fragment.
@@ -152,7 +152,7 @@ class ProxyDashboardActivity : FragmentActivity() {
         fun encode(value: String): String =
             URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
-        return "http://$APP_ASSET_HOST/zashboard/index.html#/setup" +
+        return "http://${DashboardNavigationPolicy.APP_ASSET_HOST}/zashboard/index.html#/setup" +
             "?protocol=http" +
             "&hostname=${encode(host)}" +
             "&port=$port" +
@@ -182,7 +182,4 @@ class ProxyDashboardActivity : FragmentActivity() {
         super.onDestroy()
     }
 
-    private companion object {
-        const val APP_ASSET_HOST = "appassets.androidplatform.net"
-    }
 }
