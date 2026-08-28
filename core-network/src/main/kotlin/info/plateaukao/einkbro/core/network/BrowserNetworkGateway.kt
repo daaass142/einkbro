@@ -1,6 +1,7 @@
 package info.plateaukao.einkbro.core.network
 
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 interface BrowserNetworkGateway {
     val state: StateFlow<BrowserNetworkState>
