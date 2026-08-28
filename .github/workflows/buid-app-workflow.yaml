@@ -48,6 +48,9 @@ jobs:
       - name: Decode production keystore
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: echo "${{ secrets.KEYSTORE }}" | tr -d '[:space:]' | base64 -di > "$RUNNER_TEMP/android_keystore.keystore"
+      - name: Build Mihomo debug preview
+        if: github.ref == 'refs/heads/feat/mihomo-browser'
+        run: ./gradlew assembleDebug -PuniversalApk
       - name: Build unsigned feature artifacts
         if: github.ref != 'refs/heads/main'
         run: ./gradlew assembleRelease assembleReleaseAlt -PuniversalApk
@@ -65,6 +68,11 @@ jobs:
           find app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) -print0 \
             | sort -z \
             | xargs -0 sha256sum > app/build/outputs/SHA256SUMS
+          if [ -d app/build/outputs/apk/debug ]; then
+            find app/build/outputs/apk/debug -type f -name '*.apk' -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > app/build/outputs/DEBUG_SHA256SUMS
+          fi
           cat app/build/outputs/SHA256SUMS
       - name: Upload feature build artifacts
         if: github.ref != 'refs/heads/main'
@@ -72,10 +80,19 @@ jobs:
         with:
           name: mihomo-browser-${{ github.sha }}
           path: |
+            app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/releaseAlt/*.apk
             app/build/outputs/bundle/release/*.aab
             app/build/outputs/SHA256SUMS
+            app/build/outputs/DEBUG_SHA256SUMS
+      - name: Publish Mihomo debug preview
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/mihomo-browser'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete mihomo-debug-preview --yes --cleanup-tag || true
+          gh release create mihomo-debug-preview             --prerelease             --target "$GITHUB_SHA"             --title "Mihomo Browser Debug Preview (${GITHUB_SHA:0:7})"             --notes "Automated debug preview from feat/mihomo-browser. For testing only; not a production release."             app/build/outputs/apk/debug/*.apk             app/build/outputs/DEBUG_SHA256SUMS
       - name: Publish snapshot pre-release
         # Rolling pre-release replacing the old CI-artifact "snapshot" downloads:
         # each commit on main recreates the `snapshot` tag/release so the
