@@ -257,7 +257,10 @@ class ProxyViewModel(
             refreshRuntimeInternal()
         } catch (error: Throwable) {
             profiles.discard(staged)
-            profiles.markError(profile.id, error.message)
+            profiles.markError(
+                profile.id,
+                SensitiveValueRedactor.redactUrl(error.message.orEmpty()),
+            )
             runCatching { coordinator.restartProxy() }
             throw error
         }
@@ -332,7 +335,7 @@ class ProxyViewModel(
             it.copy(
                 error = ProxyUiError(
                     ProxyErrorCategory.VPN_PERMISSION,
-                    "Android VPN permission was not granted. The previous transport remains active.",
+                    "",
                 )
             )
         }
@@ -434,8 +437,7 @@ class ProxyViewModel(
     ): ProxyUiError {
         val category = when (error) {
             is MihomoException.NativeLoadFailure,
-            is MihomoException.BridgeAbiMismatch,
-            -> ProxyErrorCategory.APP_INCOMPATIBLE
+            is MihomoException.BridgeAbiMismatch -> ProxyErrorCategory.APP_INCOMPATIBLE
 
             is MihomoException.InvalidProfile -> ProxyErrorCategory.PROFILE
             is SecurityException -> ProxyErrorCategory.VPN_PERMISSION
