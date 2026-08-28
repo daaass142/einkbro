@@ -61,7 +61,6 @@ import info.plateaukao.einkbro.activity.SettingRoute.DataControl
 import info.plateaukao.einkbro.activity.SettingRoute.Gesture
 import info.plateaukao.einkbro.activity.SettingRoute.Main
 import info.plateaukao.einkbro.activity.SettingRoute.Misc
-import info.plateaukao.einkbro.activity.SettingRoute.Proxy
 import info.plateaukao.einkbro.activity.SettingRoute.Search
 import info.plateaukao.einkbro.activity.SettingRoute.StartControl
 import info.plateaukao.einkbro.activity.SettingRoute.Toolbar
@@ -71,8 +70,6 @@ import info.plateaukao.einkbro.activity.SettingRoute.valueOf
 import info.plateaukao.einkbro.data.remote.DriveReauthRequiredException
 import info.plateaukao.einkbro.data.remote.GoogleDriveRepository
 import info.plateaukao.einkbro.preference.ConfigManager
-import info.plateaukao.einkbro.proxy.ProxySettingsScreen
-import info.plateaukao.einkbro.proxy.ProxyViewModel
 import info.plateaukao.einkbro.setting.DividerSettingItem
 import info.plateaukao.einkbro.setting.GesturePickerScreen
 import info.plateaukao.einkbro.setting.SettingItemInterface
@@ -110,7 +107,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
-import org.koin.androidx.viewmodel.ext.android.viewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -118,7 +114,6 @@ import java.util.TimeZone
 class SettingActivity : FragmentActivity(), BackupOps {
     private val config: ConfigManager by inject()
     private val driveRepository: GoogleDriveRepository by inject()
-    private val proxyViewModel: ProxyViewModel by viewModel()
     private val dialogManager: DialogManager by lazy { DialogManager(this) }
     private val backupUnit: BackupUnit by lazy { BackupUnit(this) }
 
@@ -273,19 +268,6 @@ class SettingActivity : FragmentActivity(), BackupOps {
                         }
                         composable(Misc.name) {
                             SettingScreen(navController, miscSettingItems, dialogManager, action, 1)
-                        }
-                        composable(Proxy.name) {
-                            ProxySettingsScreen(
-                                viewModel = proxyViewModel,
-                                onOpenDashboard = {
-                                    startActivity(
-                                        Intent(
-                                            this@SettingActivity,
-                                            info.plateaukao.einkbro.proxy.ProxyDashboardActivity::class.java,
-                                        )
-                                    )
-                                },
-                            )
                         }
                         composable(ChatGPT.name) {
                             SettingScreen(navController, chatGptSettingItems, dialogManager, action, 1)
@@ -616,7 +598,6 @@ enum class SettingRoute(@StringRes val titleId: Int) {
     GptSelfHosted(R.string.openai_compatible_server),
     GptGemini(R.string.google_gemini),
     Misc(R.string.misc),
-    Proxy(R.string.setting_title_proxy),
     GesturePicker(R.string.setting_gestures);
 }
 

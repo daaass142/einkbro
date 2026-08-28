@@ -25,7 +25,6 @@ class ConfigManager(
     val touch = TouchConfig(sp)
     val display = DisplayConfig(sp)
     val browser = BrowserConfig(sp)
-    val proxy = ProxyConfig(sp)
     val tab = TabConfig(sp)
     val ui = UiConfig(context, sp)
 

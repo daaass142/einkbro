@@ -4,8 +4,6 @@ import android.content.Context
 import info.plateaukao.einkbro.core.mihomo.api.MihomoEngine
 import info.plateaukao.einkbro.core.mihomo.api.MihomoException
 import info.plateaukao.einkbro.core.mihomo.api.MihomoState
-import info.plateaukao.einkbro.core.mihomo.api.MihomoTunConfig
-import info.plateaukao.einkbro.core.mihomo.api.MihomoTunController
 import info.plateaukao.einkbro.core.mihomo.api.ProxyCatalog
 import info.plateaukao.einkbro.core.mihomo.api.ProxyConnection
 import info.plateaukao.einkbro.core.mihomo.api.TrafficSnapshot
@@ -26,8 +24,7 @@ import kotlinx.serialization.json.put
 class LibMihomoEngine private constructor(
     private val runtimeManager: MihomoRuntimeManager,
     private val actions: LibMihomoActionClient,
-    private val bridge: LibMihomoBridge,
-) : MihomoEngine, MihomoTunController {
+) : MihomoEngine {
     override val state: StateFlow<MihomoState> = runtimeManager.state
 
     override suspend fun load() = runtimeManager.load()
@@ -142,28 +139,6 @@ class LibMihomoEngine private constructor(
         actions.invoke("stopListener", JsonNull)
     }
 
-    override fun startTun(
-        fd: Int,
-        config: MihomoTunConfig,
-        protect: (Int) -> Unit,
-        resolverProcess: (Int, String, String, Int) -> String,
-    ) {
-        bridge.startTun(
-            fd = fd,
-            protect = protect,
-            resolverProcess = resolverProcess,
-            device = config.device,
-            stack = config.stack,
-            address = config.address,
-            dns = config.dns,
-            mtu = config.mtu,
-        )
-    }
-
-    override fun stopTun() = bridge.stopTun()
-
-    override fun setSuspended(suspended: Boolean) = bridge.suspended(suspended)
-
     companion object {
         fun create(context: Context): LibMihomoEngine {
             val bridge = ClashLibMihomoBridge
@@ -173,7 +148,7 @@ class LibMihomoEngine private constructor(
             )
             val actions = LibMihomoActionClient(bridge)
             val manager = MihomoRuntimeManager(loader, actions)
-            return LibMihomoEngine(manager, actions, bridge)
+            return LibMihomoEngine(manager, actions)
         }
     }
 }

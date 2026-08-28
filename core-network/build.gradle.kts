@@ -28,11 +28,3 @@ android {
         jvmTarget = "17"
     }
 }
-
-dependencies {
-    implementation(libs.androidx.webkit)
-    implementation(libs.kotlinx.coroutines.core)
-
-    testImplementation(libs.junit)
-    testImplementation(libs.kotlinx.coroutines.test)
-}

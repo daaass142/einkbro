@@ -111,8 +111,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          APP_VERSION="$(sed -n 's/.*versionName = "\\(.*\\)"/\\1/p' app/build.gradle.kts | head -1)"
           gh release delete mihomo-debug-preview --yes --cleanup-tag || true
-          gh release create mihomo-debug-preview             --prerelease             --target "$GITHUB_SHA"             --title "Mihomo Browser Debug Preview (${GITHUB_SHA:0:7})"             --notes "Automated debug preview from feat/mihomo-browser. For testing only; not a production release."             app/build/outputs/apk/debug/*.apk             app/build/outputs/DEBUG_SHA256SUMS
+          gh release create mihomo-debug-preview \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "EinkBro Mihomo ${APP_VERSION} (${GITHUB_SHA:0:7})" \
+            --notes "Automated pre-release build of EinkBro Mihomo ${APP_VERSION} from feat/mihomo-browser. Tests, lint, unsigned release artifacts, and frontend bundle verification run before publication." \
+            app/build/outputs/apk/debug/*.apk \
+            app/build/outputs/DEBUG_SHA256SUMS
       - name: Publish snapshot pre-release
         # Rolling pre-release replacing the old CI-artifact "snapshot" downloads:
         # each commit on main recreates the `snapshot` tag/release so the
