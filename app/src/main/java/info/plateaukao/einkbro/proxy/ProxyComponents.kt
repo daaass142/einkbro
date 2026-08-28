@@ -1,5 +1,6 @@
 package info.plateaukao.einkbro.proxy
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -351,6 +352,15 @@ private fun ProfileCard(
                 Column(Modifier.weight(1f)) {
                     Text(profile.name, style = MaterialTheme.typography.subtitle1)
                     Text(profileSourceLabel(profile), style = MaterialTheme.typography.body2)
+                    if (profile.updatedAt > 0L) {
+                        Text(
+                            stringResource(
+                                R.string.proxy_updated_at,
+                                relativeUpdatedAt(profile.updatedAt),
+                            ),
+                            style = MaterialTheme.typography.caption,
+                        )
+                    }
                     profile.lastError?.let {
                         Text(it, style = MaterialTheme.typography.caption)
                     }
@@ -764,6 +774,14 @@ private fun knownDelayText(delay: Int?): String? =
         delay < 0 -> stringResource(R.string.proxy_delay_failed)
         else -> "$delay ms"
     }
+
+private fun relativeUpdatedAt(updatedAt: Long): String =
+    DateUtils.getRelativeTimeSpanString(
+        updatedAt,
+        System.currentTimeMillis(),
+        DateUtils.MINUTE_IN_MILLIS,
+        DateUtils.FORMAT_ABBREV_RELATIVE,
+    ).toString()
 
 private fun formatBytes(bytes: Long): String {
     val safe = bytes.coerceAtLeast(0)

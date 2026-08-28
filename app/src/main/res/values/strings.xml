@@ -837,4 +837,5 @@
     <string name="proxy_profile_required_message">Import or select a profile before enabling Mihomo.</string>
     <string name="proxy_dashboard_loading">Opening local Zashboard…</string>
     <string name="proxy_dashboard_load_failed">Zashboard could not be loaded from the bundled app assets.</string>
+    <string name="proxy_updated_at">Updated %1$s</string>
 </resources>
