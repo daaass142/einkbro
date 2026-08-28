@@ -732,4 +732,28 @@
     <string name="proxy_retry">Retry proxy</string>
     <string name="proxy_use_direct_once">Use direct once</string>
 
-</resources>
+
+    <string name="setting_title_proxy">Proxy &amp; Mihomo</string>
+    <string name="proxy_enable">Enable Mihomo proxy</string>
+    <string name="proxy_enable_summary">Route browser WebView traffic through the embedded Mihomo SOCKS5 listener.</string>
+    <string name="proxy_fail_closed">Block on proxy failure</string>
+    <string name="proxy_fail_closed_summary">Do not silently fall back to a direct Internet connection when Mihomo is unavailable.</string>
+    <string name="proxy_error">Proxy error</string>
+    <string name="proxy_import_yaml">Import YAML</string>
+    <string name="proxy_add_subscription">Add subscription</string>
+    <string name="proxy_profiles">Profiles</string>
+    <string name="proxy_no_profiles">No Mihomo profiles have been added yet.</string>
+    <string name="proxy_local_profile">Local profile</string>
+    <string name="proxy_refresh_subscription">Refresh subscription</string>
+    <string name="proxy_routing_mode">Routing mode</string>
+    <string name="proxy_traffic">Traffic: ↓ %1$s  ↑ %2$s</string>
+    <string name="proxy_refresh">Refresh</string>
+    <string name="proxy_change_node">Change node</string>
+    <string name="proxy_test_delay">Test delay</string>
+    <string name="proxy_delay_failed">Delay failed</string>
+    <string name="proxy_open_dashboard">Open Zashboard</string>
+    <string name="proxy_profile_name">Profile name</string>
+    <string name="proxy_subscription_url">HTTPS subscription URL</string>
+    <string name="proxy_add">Add</string>
+
+    <string name="proxy_dashboard_not_ready">Zashboard assets are not ready yet.</string>\n</resources>

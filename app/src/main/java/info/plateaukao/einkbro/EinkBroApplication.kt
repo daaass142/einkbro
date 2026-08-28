@@ -31,6 +31,9 @@ import info.plateaukao.einkbro.core.network.AndroidWebViewProxyAdapter
 import info.plateaukao.einkbro.core.network.BrowserNetworkGateway
 import info.plateaukao.einkbro.core.network.BrowserNetworkGatewayImpl
 import info.plateaukao.einkbro.proxy.MihomoBrowserCoordinator
+import info.plateaukao.einkbro.proxy.ProxyViewModel
+import info.plateaukao.einkbro.core.mihomo.profile.ProfileRepository
+import info.plateaukao.einkbro.core.mihomo.profile.SubscriptionUpdater
 import info.plateaukao.einkbro.preference.ConfigManager
 import info.plateaukao.einkbro.search.suggestion.SearchSuggestionViewModel
 import info.plateaukao.einkbro.data.remote.GoogleDriveRepository
@@ -97,10 +100,13 @@ class EinkBroApplication : Application() {
         single { LibMihomoEngine.create(androidContext()) }
         single<MihomoEngine> { get<LibMihomoEngine>() }
         single { MihomoSessionManager.create(androidContext(), get()) }
+        single { ProfileRepository.create(androidContext()) }
+        single { SubscriptionUpdater.create(androidContext(), get()) }
         single<BrowserNetworkGateway> {
             BrowserNetworkGatewayImpl(AndroidWebViewProxyAdapter(androidContext()))
         }
         single { MihomoBrowserCoordinator(get(), get(), get()) }
+        viewModel { ProxyViewModel(get(), get(), get(), get(), get(), get()) }
         viewModel { TranslationViewModel(get(), get()) }
         viewModel { TtsViewModel(get(), get(), get()) }
         viewModel { ActionModeMenuViewModel(get()) }
