@@ -16,12 +16,12 @@ Goal: stabilize the frontend contract before visual polish.
 
 Tasks:
 
-- [ ] inventory current Proxy UI implementation;
-- [ ] define `RuntimeUiStatus`;
-- [ ] replace ambiguous global `busy` with typed `ProxyAction`;
-- [ ] define typed `ProxyUiError`;
-- [ ] add UI mappers;
-- [ ] confirm all state comes through ViewModel/domain interfaces;
+- [x] inventory current Proxy UI implementation;
+- [x] define `RuntimeUiStatus`;
+- [x] replace ambiguous global `busy` with typed `ProxyAction`;
+- [x] define typed `ProxyUiError`;
+- [x] add UI mappers;
+- [x] confirm all proxy/runtime state comes through ViewModel/domain interfaces;
 - [ ] remove any direct runtime/storage calls from composables.
 
 Acceptance:
@@ -42,18 +42,18 @@ Goal: make protection state obvious.
 
 Tasks:
 
-- [ ] implement `RuntimeStatusCard`;
-- [ ] add Off/Starting/Protected/Blocked/Error/Temporary Direct states;
-- [ ] implement Browser Proxy vs Strict VPN selector;
-- [ ] wire system VPN permission;
-- [ ] keep previous transport if permission denied;
-- [ ] show fail-closed option;
-- [ ] implement Retry and Direct Once actions;
-- [ ] add grayscale-safe icons/text.
+- [x] implement `RuntimeStatusCard`;
+- [x] add Off/Starting/Protected/Blocked/Error/Temporary Direct states;
+- [x] implement Browser Proxy vs Strict VPN selector;
+- [x] wire system VPN permission;
+- [x] keep previous transport if permission denied;
+- [x] show fail-closed option;
+- [x] implement Retry and Direct Once actions;
+- [x] add grayscale-safe text/status treatment.
 
 Tests:
 
-- [ ] state mapper tests;
+- [x] state mapper tests;
 - [ ] permission denial;
 - [ ] Strict VPN start;
 - [ ] VPN revoke -> Blocked;
@@ -71,23 +71,23 @@ Goal: make profile setup understandable without exposing secrets.
 
 Tasks:
 
-- [ ] profile empty state;
-- [ ] import YAML action;
-- [ ] add subscription dialog;
-- [ ] safe subscription host display;
-- [ ] active profile radio/selection;
-- [ ] refresh state per profile;
-- [ ] delete confirmation;
-- [ ] active-profile deletion behavior;
-- [ ] last update status;
-- [ ] error redaction.
+- [x] profile empty state;
+- [x] import YAML action;
+- [x] add subscription dialog;
+- [x] safe subscription host display;
+- [x] active profile radio/selection;
+- [x] refresh state per profile;
+- [x] delete confirmation;
+- [x] active-profile deletion behavior;
+- [x] last update status;
+- [x] error redaction.
 
 Tests:
 
-- [ ] URL token never rendered;
+- [x] URL token never rendered;
 - [ ] failed refresh keeps active profile;
 - [ ] deleting active profile behaves explicitly;
-- [ ] loading state scoped to one profile.
+- [x] loading state scoped to one profile.
 
 Commit:
 
@@ -101,22 +101,22 @@ Goal: cover frequent Mihomo controls natively.
 
 Tasks:
 
-- [ ] Rule / Global / Direct via Mihomo selector;
-- [ ] proxy group cards;
-- [ ] preserve runtime group order;
-- [ ] replace production DropdownMenu with node picker sheet/dialog;
-- [ ] add node search;
-- [ ] lazy list for large groups;
-- [ ] manual delay test;
-- [ ] show current node delay;
-- [ ] per-action loading;
-- [ ] traffic summary.
+- [x] Rule / Global / Direct via Mihomo selector;
+- [x] proxy group cards;
+- [x] preserve runtime group order;
+- [x] replace production DropdownMenu with searchable node picker dialog;
+- [x] add node search;
+- [x] lazy list for large groups;
+- [x] manual delay test;
+- [x] show current node delay;
+- [x] per-action loading;
+- [x] traffic summary.
 
 Tests:
 
 - [ ] node switch does not restart core;
 - [ ] Direct via Mihomo does not clear browser proxy;
-- [ ] 500+ node list remains usable;
+- [x] 500+ node filtering is covered by unit tests;
 - [ ] delay timeout state;
 - [ ] no all-node test on screen open.
 
@@ -132,21 +132,21 @@ Goal: make the bundled Zashboard the advanced console.
 
 Tasks:
 
-- [ ] keep exact pinned `v3.24.0`;
-- [ ] keep verified `dist-no-fonts.zip`;
-- [ ] verify archive extraction in CI;
-- [ ] assert generated `index.html` exists;
-- [ ] use `WebViewAssetLoader`;
-- [ ] prefer HTTPS appassets origin;
-- [ ] load `/zashboard/index.html#/setup`;
-- [ ] pass loopback host/port/secret;
-- [ ] pass `disableUpgradeCore=1`;
-- [ ] pass `disableTunMode=1`;
-- [ ] block arbitrary dashboard navigation;
-- [ ] open external links in normal browser;
-- [ ] clear dashboard history;
-- [ ] destroy WebView on close;
-- [ ] no `addJavascriptInterface`.
+- [x] keep exact pinned `v3.24.0`;
+- [x] keep verified `dist-no-fonts.zip`;
+- [x] verify archive extraction in CI;
+- [x] assert generated `index.html` exists;
+- [x] use `WebViewAssetLoader`;
+- [x] use HTTP appassets origin intentionally while the loopback controller is HTTP, with mixed content disabled;
+- [x] load `/zashboard/index.html#/setup`;
+- [x] pass loopback host/port/secret;
+- [x] pass `disableUpgradeCore=1`;
+- [x] pass `disableTunMode=1`;
+- [x] block arbitrary dashboard navigation;
+- [x] open external links in normal browser;
+- [x] clear dashboard history;
+- [x] destroy WebView on close;
+- [x] no `addJavascriptInterface`.
 
 Integration tests:
 
@@ -171,17 +171,17 @@ Goal: make the feature feel native to EinkBro.
 
 Tasks:
 
-- [ ] remove unnecessary animations;
+- [x] remove unnecessary native proxy animations/spinners;
 - [ ] check grayscale status;
 - [ ] check dark/light theme;
 - [ ] check 200% font scale;
-- [ ] content descriptions;
-- [ ] large tap targets;
-- [ ] minimize native traffic repaint frequency;
-- [ ] avoid auto node tests;
+- [x] add semantic roles to interactive switch/radio/node rows;
+- [x] enforce large tap targets;
+- [x] keep native traffic refresh manual;
+- [x] avoid auto node tests;
 - [ ] check long profile/node names;
 - [ ] check portrait/landscape;
-- [ ] check tablet content width.
+- [x] constrain and center tablet/wide-screen content width.
 
 Optional:
 
@@ -206,16 +206,16 @@ Goal: give enough support information without leaking secrets.
 
 Tasks:
 
-- [ ] diagnostics card;
-- [ ] runtime/controller/SOCKS readiness;
-- [ ] component versions;
-- [ ] WebView feature support;
-- [ ] redacted last error;
-- [ ] no secret/full subscription URL;
+- [x] diagnostics card;
+- [x] runtime/controller/SOCKS readiness;
+- [x] component versions;
+- [x] WebView feature support;
+- [x] redacted last error;
+- [x] no secret/full subscription URL;
 - [ ] optional copy diagnostics with redaction;
 - [ ] release WebView debugging assertion;
 - [ ] third-party cookie assertion;
-- [ ] navigation policy tests.
+- [x] navigation policy tests.
 
 Commit:
 
@@ -229,16 +229,16 @@ Goal: prevent frontend regressions from reaching debug/release builds.
 
 CI tasks:
 
-- [ ] unit tests;
-- [ ] lint;
-- [ ] assembleDebug;
-- [ ] assembleRelease;
-- [ ] bundleRelease;
-- [ ] verify Zashboard checksum;
-- [ ] verify `index.html`;
-- [ ] verify expected ABIs;
-- [ ] generate SHA256SUMS;
-- [ ] publish debug preview after green build.
+- [x] unit tests;
+- [x] lint;
+- [x] assembleDebug;
+- [x] assembleRelease;
+- [x] bundleRelease;
+- [x] verify Zashboard checksum;
+- [x] verify `index.html`;
+- [x] verify expected ABIs;
+- [x] generate SHA256SUMS;
+- [x] publish debug preview after green build.
 
 Manual release blockers:
 
@@ -294,3 +294,23 @@ Frontend implementation is complete when:
 - fail-closed status is visible and enforced;
 - tests/lint/debug/release build are green;
 - system-level VPN release blockers pass on Android.
+
+
+## Current validation boundary
+
+The checked items above mean the implementation exists in code or CI and is
+covered by the stated automated checks. They do **not** replace Android hardware
+validation.
+
+The following remain release blockers until exercised on a real/emulated Android
+environment where applicable:
+
+- Android VPN grant/reject and revoke lifecycle;
+- process kill/restart while Strict VPN is active;
+- browser fail-closed leak test;
+- Strict VPN IPv4/IPv6, TCP/UDP and DNS;
+- WebSocket and QUIC/HTTP3 behavior;
+- locally bundled Zashboard with Internet disabled except loopback;
+- grayscale/E-Ink device review, 200% font scale, rotation and long-name review.
+
+Do not mark these complete based only on JVM tests or APK compilation.
