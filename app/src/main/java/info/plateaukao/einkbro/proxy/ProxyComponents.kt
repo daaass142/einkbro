@@ -533,9 +533,7 @@ internal fun NodePickerDialog(
 ) {
     var query by remember(group.name) { mutableStateOf("") }
     val filtered = remember(group.proxies, query) {
-        val normalized = query.trim()
-        if (normalized.isBlank()) group.proxies
-        else group.proxies.filter { it.contains(normalized, ignoreCase = true) }
+        ProxyNodeFilter.filter(group.proxies, query)
     }
 
     AlertDialog(
