@@ -19,3 +19,5 @@ rootProject.name = "einkbro"
 include(":adblock-client")
 include(":ad-filter")
 include(":app")
+include(":core-mihomo")
+include(":core-network")

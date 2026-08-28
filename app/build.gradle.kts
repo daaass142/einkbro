@@ -122,6 +122,7 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".g"
             matchingFallbacks += "release"
+            matchingFallbacks += "release"
             if (hasUploadKeystore) {
                 signingConfig = signingConfigs.getByName("play")
             }
@@ -237,6 +238,8 @@ dependencies {
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
 
     implementation(project(":ad-filter"))
+    implementation(project(":core-mihomo"))
+    implementation(project(":core-network"))
 
     // epub4j (maintained fork of epublib). Android ships xmlpull in the platform, so
     // the transitive xmlpull jar is excluded to avoid duplicate XmlPullParser classes.
