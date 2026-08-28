@@ -14,6 +14,11 @@ plugins {
     alias(libs.plugins.play.publisher)
 }
 
+// The app, not the Android library module, owns packaging the native libmihomo AAR.
+val libmihomoAar = project(":core-mihomo").layout.buildDirectory.file(
+    "third-party/libmihomo-android.aar"
+)
+
 // A ValueSource so the timestamp is (re)computed on every build, even when the
 // configuration cache is reused — a plain config-time value gets frozen into the
 // cache entry and goes stale. SOURCE_DATE_EPOCH still wins so reproducible
@@ -240,6 +245,7 @@ dependencies {
     implementation(project(":ad-filter"))
     implementation(project(":core-mihomo"))
     implementation(project(":core-network"))
+    implementation(files(libmihomoAar).builtBy(":core-mihomo:fetchLibmihomo"))
 
     // epub4j (maintained fork of epublib). Android ships xmlpull in the platform, so
     // the transitive xmlpull jar is excluded to avoid duplicate XmlPullParser classes.

@@ -19,7 +19,7 @@ val libmihomoSha256 = requireNotNull(
 )
 
 val libmihomoAar = layout.buildDirectory.file(
-    "third-party/libmihomo-android-v$libmihomoVersion.aar"
+    "third-party/libmihomo-android.aar"
 )
 
 val fetchLibmihomo = tasks.register<VerifiedDownloadTask>("fetchLibmihomo") {
@@ -61,7 +61,7 @@ android {
 }
 
 dependencies {
-    implementation(libmihomoFiles)
+    compileOnly(libmihomoFiles)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
 
