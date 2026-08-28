@@ -63,6 +63,26 @@ jobs:
       - name: Build signed production bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: ./gradlew bundleRelease -Pandroid.injected.signing.store.file=$RUNNER_TEMP/android_keystore.keystore -Pandroid.injected.signing.store.password=${{ secrets.PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.PASSWORD }}
+      - name: Verify Mihomo frontend bundle
+        if: github.ref == 'refs/heads/feat/mihomo-browser'
+        run: |
+          test -s app/build/generated/zashboard-assets/index.html
+          find app/build/generated/zashboard-assets -type f -name '*.js' -print -quit | grep -q .
+          find app/build/generated/zashboard-assets -type f -name '*.css' -print -quit | grep -q .
+
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            find app/build/outputs/apk/debug -type f -name "*${abi}*.apk" -print -quit | grep -q .
+            find app/build/outputs/apk/release -type f -name "*${abi}*.apk" -print -quit | grep -q .
+          done
+
+          find app/build/outputs/apk/debug -type f -name '*universal*.apk' -print -quit | grep -q .
+          find app/build/outputs/apk/release -type f -name '*universal*.apk' -print -quit | grep -q .
+          test -s app/build/outputs/bundle/release/app-release.aab
+
+          if find app/build/outputs/apk -type f -name '*-x86-*.apk' -print -quit | grep -q .; then
+            echo "Unexpected unsupported x86 APK was produced" >&2
+            exit 1
+          fi
       - name: Generate artifact checksums
         run: |
           find app/build/outputs -type f \( -name '*.apk' -o -name '*.aab' \) -print0 \
