@@ -1,738 +1,916 @@
-# EinkBro + mihomo + Zashboard Browser Specification
+# EinkBro Mihomo Browser — Technical Specification
 
-Status: implementation-ready architecture specification  
-Branch: `feat/mihomo-browser`  
-Base application: EinkBro  
-Proxy runtime: `daaass142/libmihomo-android`  
-Proxy dashboard: `Zephyruso/zashboard`
+Status: implementation-ready  
+Repository: daaass142/einkbro  
+Branch: feat/mihomo-browser  
+Base browser: plateaukao/einkbro  
+Embedded proxy runtime: daaass142/libmihomo-android  
+Advanced proxy UI: Zephyruso/zashboard
 
-## 1. Goal
+## 1. Product goal
 
-Build an Android browser on top of EinkBro that starts an embedded mihomo core automatically and routes browser traffic through that core by default.
+Build an Android browser based on EinkBro that embeds mihomo in the same APK and automatically routes browser traffic through mihomo.
 
-The product is a browser with an embedded network engine, not a general-purpose VPN client with a browser bolted on.
+The product is a browser with an embedded network engine. It is not a general-purpose VPN client with a browser attached.
 
 Primary requirements:
 
-- Preserve EinkBro's existing browser, E-Ink, reader, tab, download, ad-filtering and settings features.
-- Start mihomo before restored tabs or external URLs are allowed to make network requests.
-- Route WebView traffic through mihomo automatically.
-- Provide an optional strict mode backed by Android `VpnService` for traffic that cannot be guaranteed to follow a WebView HTTP proxy.
-- In strict mode, route this application only by default; do not capture unrelated applications.
-- Embed Zashboard locally as the full mihomo management UI.
-- Support proxy groups, selectors, URL tests, providers, connections, rules, traffic and other normal mihomo dashboard functions through Zashboard instead of duplicating them in Compose.
-- Support local profiles and subscription URLs.
-- Default to fail-closed behavior when proxy startup fails.
-- Keep controller and proxy listeners loopback-only unless the user explicitly enables a future LAN-server feature.
+- Preserve EinkBro browsing, E-Ink, reader, tab, download, ad-filtering and settings behavior.
+- Start mihomo before restored tabs or external-intent URLs can make network requests.
+- Route WebView traffic through a local mihomo SOCKS5 listener by default.
+- Default to browser-scoped proxying and do not capture unrelated Android applications.
+- Provide native quick controls for status, routing mode, proxy groups, selector switching, delay tests and traffic.
+- Bundle Zashboard locally for complete proxy/provider/rule/connection management.
+- Support local YAML profiles and remote subscription URLs.
+- Default to fail-closed behavior when the proxy is expected to be active.
+- Keep all local proxy and controller listeners bound to loopback.
+- Pin and verify libmihomo and Zashboard artifacts in release builds.
+- Keep the architecture small enough to remain maintainable as EinkBro and mihomo evolve.
 
-## 2. Existing codebase constraints
+## 2. Upstream and dependency baseline
 
-EinkBro currently uses:
+### 2.1 EinkBro
+
+The current EinkBro codebase already uses:
 
 - Kotlin
 - Jetpack Compose
 - Android WebView
+- AndroidX WebKit
 - MVVM
 - Koin
 - Room
 - KSP
+- OkHttp
+- kotlinx.serialization
 - Java 17
+- compileSdk 36
+- targetSdk 36
 - minSdk 24
-- modules `:app`, `:ad-filter`, `:adblock-client`
 
-The implementation MUST extend these conventions instead of adding a second DI, reactive or UI architecture.
+The implementation MUST extend these conventions rather than introducing a second application architecture.
 
-Do not introduce Hilt/Dagger, RxJava, Redux/MVI frameworks, Retrofit, or a second JSON stack without a demonstrated requirement.
+Do not add Hilt/Dagger, RxJava, Retrofit, another JSON stack, or a second reactive state framework without a concrete technical requirement.
 
-`libmihomo-android` is consumed as an Android AAR. It already contains the JNI/CGo bridge and exposes a Kotlin facade. The application MUST NOT fork or copy that JNI bridge into EinkBro.
+### 2.2 libmihomo-android
 
-Important library properties at the time this specification was written:
+Use daaass142/libmihomo-android as the only native mihomo integration.
 
-- facade entry point: `io.github.oviron.libmihomo.Clash`
-- lifecycle/API methods include `load`, `quickSetup`, `invokeAction`, `startTUN`, `stopTun`, `setEventListener`, `getTraffic`, `getTotalTraffic`, `suspended`, `updateDNS`
-- strict VPN integration is exposed through `TunInterface`, including outbound socket `protect(fd)` callbacks
-- supported ABIs: `arm64-v8a`, `armeabi-v7a`, `x86_64`
-- minSdk of the library is 21, which is compatible with EinkBro's minSdk 24
-- host AGP must satisfy the library's current 16 KiB alignment requirement (currently documented as AGP 8.5.1+)
-- the native bridge exposes a `bridgeABI()` compatibility check
+The application MUST NOT copy the Go/cgo/JNI bridge into the EinkBro repository.
 
-The AAR version MUST be pinned exactly. Never use `latest`, a wildcard version, or an unverified moving artifact in release builds.
+At the time this specification was revised, the fork exposes:
 
-## 3. Architecture decision
+- Android AAR distribution
+- Kotlin entry point io.github.oviron.libmihomo.Clash
+- libclash.so plus libmihomo-jni.so
+- arm64-v8a, armeabi-v7a and x86_64
+- bridgeABI compatibility checks
+- quickSetup and invokeAction
+- getTraffic and getTotalTraffic
+- event listener support
+- TUN support for a future strict mode
+- direct listener recreation for HTTP, SOCKS and mixed listeners inside the embedded core
 
-Use a small modular-monolith extension to EinkBro:
+Current development baseline observed in the fork:
 
-```text
+- bridgeABI: 3
+- latest published prerelease inspected: v0.3.2-alpha.20260827
+- AAR SHA-256: 6acc2446392ecea0307609147387c89ba38f4697d5d3d4c80e10fd51ea4265e7
+- the main branch currently tracks a mihomo v1.19.31 development pseudo-version from 2026-08-27
+
+Release builds MUST consume an exact release artifact and MUST NOT depend on main, latest, wildcard versions, or a moving URL.
+
+Before the first production release, either:
+
+1. pin a tested stable libmihomo release, or
+2. cut a tested stable release in daaass142/libmihomo-android and pin that exact version.
+
+## 3. Architecture decisions
+
+### ADR-001 — libmihomo is the native boundary
+
+All native mihomo work is delegated to libmihomo-android.
+
+EinkBro contains only an application-side adapter around the library.
+
+### ADR-002 — SOCKS5 is the default browser transport
+
+The default route is:
+
+~~~text
+EBWebView
+  -> AndroidX WebKit ProxyController
+  -> socks://127.0.0.1:<runtime-port>
+  -> embedded mihomo
+  -> rules / proxy groups
+  -> selected outbound
+  -> Internet
+~~~
+
+Do not use mixed-port by default when the browser only needs one explicit proxy protocol.
+
+The runtime configuration SHOULD disable unused HTTP and mixed listeners unless a future feature requires them.
+
+### ADR-003 — browser-scoped proxy first
+
+The default product mode does not use Android VpnService.
+
+This keeps proxying scoped to WebView/browser traffic, avoids a VPN permission prompt, avoids capturing other applications, and keeps the normal browser lifecycle lightweight.
+
+### ADR-004 — strict VPN is optional and separate
+
+A future Strict mode may use Android VpnService and libmihomo startTUN for application-only capture.
+
+Strict mode is not required for the initial browser proxy MVP.
+
+### ADR-005 — native quick UI uses JNI actions
+
+Native Compose quick controls use MihomoEngine -> LibMihomoActionClient -> Clash.invokeAction.
+
+Do not route native quick controls through localhost HTTP when libmihomo already exposes the same operation in-process.
+
+### ADR-006 — Zashboard owns the full management UI
+
+Zashboard remains the complete advanced management interface for proxy groups, providers, rules, connections, logs and other normal Clash/mihomo dashboard functions.
+
+Native Compose implements only browser-centric quick controls and settings.
+
+### ADR-007 — controller is for Zashboard, not the application domain API
+
+Mihomo external-controller is enabled on loopback only so bundled Zashboard can use its REST/WebSocket API.
+
+Application business code SHOULD use the typed libmihomo adapter for operations already exposed by invokeAction.
+
+### ADR-008 — fail closed by default
+
+When proxy-on-start is enabled, a missing or failed mihomo runtime MUST NOT silently fall back to direct browsing.
+
+Direct access requires an explicit user action or an explicitly configured non-strict failure policy.
+
+## 4. Gradle module layout
+
+Initial implementation adds only two modules:
+
+~~~text
 :app
-  |-- browser UI / EBWebView / tabs / navigation
-  |-- native proxy overview and Android-only settings
-  |
-  +--> :core-network
-  |       |-- BrowserNetworkGateway
-  |       |-- WebView proxy integration
-  |       `-- fail-closed readiness gate
-  |
-  +--> :core-mihomo
-          |-- lifecycle
-          |-- profile/config pipeline
-          |-- controller adapter
-          |-- VPN/TUN service
-          `--> libmihomo-android AAR
-```
-
-Do not create a separate `mihomo-runtime` Gradle module unless a later implementation requires runtime-swappable AARs. The AAR already is the native runtime boundary; `:core-mihomo` is the application-side adapter boundary.
-
-Add only these new Gradle modules for the initial implementation:
-
-```text
 :core-network
 :core-mihomo
-```
+:ad-filter
+:adblock-client
+~~~
 
-Keep proxy UI in `:app` initially. A separate `:feature-proxy` module is optional and should only be introduced if the UI grows enough to justify it.
+Do not prematurely create many feature modules.
 
-## 4. Responsibility boundaries
-
-### `:app`
+### 4.1 :app
 
 Owns:
 
-- existing EinkBro browser UI
-- browser tabs and navigation
-- Compose proxy overview
-- profile selection UI
-- Android VPN permission UX
-- Dashboard screen/container
-- opening local Zashboard
+- existing EinkBro UI and browser behavior
+- proxy status UI
+- native quick proxy panel
+- profile/settings screens
+- dashboard screen
+- Android permission UX
+- navigation
 
 Must not:
 
-- call `Clash.*` directly
-- parse or mutate runtime YAML directly
-- own VPN/TUN file descriptors
-- implement proxy group business logic already provided by Zashboard
+- import io.github.oviron.libmihomo directly
+- own YAML runtime mutation logic
+- manipulate native library paths
+- manage TUN file descriptors
+- duplicate the complete Zashboard UI
 
-### `:core-network`
+### 4.2 :core-network
 
-Owns the question: "may the browser access the network now?"
+Owns:
 
-Public API:
+- browser network readiness
+- WebView ProxyController integration
+- SOCKS proxy binding
+- startup gate
+- fail-closed behavior
+- direct/proxy mode transitions
+- feature detection for AndroidX WebKit
 
-```kotlin
+Suggested API:
+
+~~~kotlin
 interface BrowserNetworkGateway {
     val state: StateFlow<BrowserNetworkState>
+
     suspend fun prepare()
+    suspend fun enableProxy(endpoint: ProxyEndpoint)
+    suspend fun enableDirect()
+    suspend fun block()
     suspend fun shutdown()
 }
 
 sealed interface BrowserNetworkState {
     data object Stopped : BrowserNetworkState
     data object Starting : BrowserNetworkState
-    data object Ready : BrowserNetworkState
+    data object Blocked : BrowserNetworkState
+    data class Ready(val mode: BrowserNetworkMode) : BrowserNetworkState
     data class Error(val cause: Throwable) : BrowserNetworkState
 }
-```
+~~~
 
-Also owns a WebView proxy adapter built on AndroidX WebKit `ProxyController` when supported.
-
-The browser MUST not restore network tabs until `BrowserNetworkState.Ready` when proxy-on-start is enabled.
-
-### `:core-mihomo`
+### 4.3 :core-mihomo
 
 Owns all application interaction with libmihomo:
 
-```text
+~~~text
 core-mihomo/
-  src/main/java/.../
+  src/main/kotlin/.../
     api/
-      MihomoManager.kt
+      MihomoEngine.kt
       MihomoState.kt
-      ProxyTransportMode.kt
+      MihomoModels.kt
+      MihomoException.kt
     runtime/
-      LibMihomoAdapter.kt
-      MihomoManagerImpl.kt
+      LibMihomoEngine.kt
+      LibMihomoLoader.kt
+      LibMihomoActionClient.kt
+      LibMihomoMapper.kt
+      MihomoRuntimeManager.kt
     config/
-      ProfileRepository.kt
       RuntimeConfigBuilder.kt
       ConfigValidator.kt
       ConfigStore.kt
+      PortAllocator.kt
+    profile/
+      ProfileRepository.kt
+      SubscriptionRepository.kt
+      SubscriptionUpdater.kt
+    security/
+      SecretStore.kt
+      SensitiveValueRedactor.kt
     controller/
-      MihomoController.kt
-      LocalControllerClient.kt
+      ControllerEndpoint.kt
     vpn/
       MihomoVpnService.kt
-      VpnPermissionManager.kt
       TunSession.kt
-      SocketProtector.kt
-```
+~~~
 
-Only `runtime/LibMihomoAdapter` may import `io.github.oviron.libmihomo.*`.
+The vpn package may exist as a placeholder but is implemented only in the Strict-mode phase.
 
-## 5. Mihomo adapter
+Only runtime/libmihomo adapter classes may import io.github.oviron.libmihomo.
 
-Wrap the third-party facade so the rest of EinkBro does not depend on unstable pre-1.0 API details.
+## 5. Domain-facing Mihomo API
 
-```kotlin
-interface MihomoRuntime {
+The rest of EinkBro depends on a stable application interface rather than the pre-1.0 library API.
+
+Suggested interface:
+
+~~~kotlin
+interface MihomoEngine {
+    val state: StateFlow<MihomoState>
+
     suspend fun load()
-    suspend fun start(profile: File)
+    suspend fun start(profile: MihomoProfile)
+    suspend fun reload(profile: MihomoProfile)
     suspend fun stop()
-    suspend fun invoke(action: String): String
-    suspend fun startTun(config: TunConfig)
-    suspend fun stopTun()
-    fun setSuspended(value: Boolean)
+
+    suspend fun proxies(): List<ProxyGroup>
+    suspend fun selectProxy(group: String, proxy: String)
+    suspend fun testDelay(proxy: String, url: String, timeoutMs: Int): Int
+    suspend fun traffic(): TrafficSnapshot
+    suspend fun connections(): List<ProxyConnection>
+    suspend fun closeConnection(id: String)
+    suspend fun closeAllConnections()
+
+    suspend fun updateProvider(type: String, name: String)
+    suspend fun setRoutingMode(mode: RoutingMode)
 }
-```
+~~~
 
-`LibMihomoAdapter` maps these calls to:
+LibMihomoEngine maps these operations to:
 
-- `Clash.load(...)`
-- `Clash.bridgeABI()` / `Clash.EXPECTED_BRIDGE_ABI`
-- `Clash.quickSetup(...)`
-- `Clash.invokeAction(...)`
-- `Clash.startTUN(...)`
-- `Clash.stopTun()`
-- `Clash.suspended(...)`
+- Clash.load
+- Clash.bridgeABI
+- Clash.quickSetup
+- Clash.invokeAction
+- Clash.getTraffic
+- Clash.getTotalTraffic
+- Clash.setEventListener
+- Clash.suspended
 
-All callback APIs must be converted to suspend functions using cancellable coroutine adapters. Do not block libmihomo callback threads.
+All callback APIs MUST be adapted to coroutines without blocking libmihomo callback threads.
 
-On startup:
+## 6. Native action client
 
-1. Load native libraries exactly once per process.
-2. Verify `bridgeABI()` before starting the core.
-3. Fail closed on ABI mismatch.
-4. Initialize/apply the generated runtime profile.
-5. Health-check the local listener/controller.
-6. Only then mark browser networking Ready.
+LibMihomoActionClient is the single place that understands the JSON action protocol.
 
-## 6. Runtime state machine
+It should expose typed methods for the libmihomo actions actually used by the app.
 
-Use a single state machine rather than several booleans:
+Initial action coverage:
 
-```text
-STOPPED -> STARTING -> RUNNING -> STOPPING -> STOPPED
-                |          |
-                +-> ERROR <-+
-```
+- getProxies
+- changeProxy
+- testDelay
+- probeCurrentProxyIp
+- queryProxyGroupOrder
+- queryExternalProviders
+- getExternalProvider
+- updateExternalProvider
+- getConnections
+- closeConnection
+- closeAllConnections
+- getTraffic
+- getTotalTraffic
+- updateConfig
+- setupConfig
+- validateConfig
+- startListener
+- stopListener
 
-Suggested model:
+Do not let ViewModels construct action JSON strings.
 
-```kotlin
+Every action must:
+
+1. have a unique request ID,
+2. parse the returned action envelope,
+3. validate code == 0,
+4. map JSON payloads to typed application models,
+5. convert native/library errors into MihomoException subclasses.
+
+## 7. Runtime state machine
+
+Use one serialized owner of the core.
+
+~~~text
+STOPPED
+   -> LOADING
+   -> STARTING
+   -> RUNNING
+   -> RELOADING
+   -> RUNNING
+   -> STOPPING
+   -> STOPPED
+
+Any state
+   -> ERROR
+~~~
+
+Suggested state:
+
+~~~kotlin
 sealed interface MihomoState {
     data object Stopped : MihomoState
+    data object Loading : MihomoState
     data object Starting : MihomoState
-    data object Running : MihomoState
+
+    data class Running(
+        val socksEndpoint: ProxyEndpoint,
+        val controllerEndpoint: ControllerEndpoint,
+        val profileId: String
+    ) : MihomoState
+
+    data object Reloading : MihomoState
     data object Stopping : MihomoState
     data class Error(val cause: Throwable) : MihomoState
 }
-```
+~~~
 
-`start()` and `stop()` must be idempotent and serialized with a `Mutex` or equivalent single-owner mechanism. Multiple Activity/ViewModel calls must never create multiple cores.
+Requirements:
 
-## 7. Traffic modes
+- load is process-once and idempotent.
+- start/stop/reload are serialized by Mutex or an equivalent single-owner mechanism.
+- multiple Activity/ViewModel calls cannot create multiple runtimes.
+- bridgeABI is checked before the first setup.
+- an ABI mismatch is fatal and fail-closed.
+- process lifecycle suspension may use Clash.suspended where safe.
 
-### 7.1 Browser Proxy mode - default
+## 8. Default SOCKS5 runtime
 
-Default route:
+### 8.1 Listener configuration
 
-```text
-EBWebView
-  -> AndroidX WebKit ProxyController
-  -> 127.0.0.1:<mihomo mixed port>
-  -> mihomo
-  -> selected proxy / rule / direct
-```
+Generated runtime configuration MUST force:
 
-This mode is the default because it does not require Android VPN permission and best preserves EinkBro's lightweight behavior.
-
-Use AndroidX WebKit feature detection. Never use reflection-based WebView proxy hacks or global `System.setProperty` proxy settings.
-
-The generated mihomo runtime config must force the browser-facing listener to loopback only:
-
-```yaml
+~~~yaml
 allow-lan: false
 bind-address: 127.0.0.1
-mixed-port: <app-owned-port>
-```
 
-Do not hard-code common Clash ports such as 7890 if avoidable. The port belongs to the app runtime configuration.
+port: 0
+mixed-port: 0
+socks-port: <app-owned-runtime-port>
 
-Browser Proxy mode is not presented as a cryptographic guarantee that every possible Android/WebView socket path is captured. Users needing complete capture use Strict mode.
+external-controller: 127.0.0.1:<app-owned-controller-port>
+secret: <application-generated-secret>
+~~~
 
-### 7.2 Strict mode - application-only VPN
+Any imported profile values that conflict with these application security invariants are overridden in the generated runtime profile.
 
-Strict mode route:
+### 8.2 Runtime ports
 
-```text
-EinkBro process
-  -> Android VpnService
-  -> TUN fd
-  -> libmihomo `startTUN`
-  -> mihomo outbound
-  -> Internet
-```
+Do not assume 7890/9090 are always free.
 
-`MihomoVpnService` implements libmihomo `TunInterface`.
+PortAllocator should:
 
-Critical rule: `TunInterface.protect(fd)` MUST delegate to `VpnService.protect(fd)` so mihomo outbound sockets do not loop back into its own TUN.
+1. choose from a private high-port range,
+2. verify loopback availability,
+3. generate the runtime config,
+4. start mihomo,
+5. health-check the actual listener,
+6. retry with a new port on bind failure.
 
-Use `VpnService.Builder.addAllowedApplication(applicationContext.packageName)` so only this browser is captured by default.
+Persisting the last successful ports is optional; correctness is more important than port stability.
 
-Do not implement a system-wide VPN as the initial product behavior.
+### 8.3 WebView proxy binding
 
-Strict mode must correctly handle:
+Use AndroidX WebKit ProxyController with feature detection.
 
-- VPN permission grant/revoke
-- foreground-service lifecycle
-- process death
-- `onRevoke()`
-- TUN fd ownership/closure
-- socket protection
-- IPv4/IPv6
-- DNS
-- TCP/UDP
-- WebSocket
-- QUIC/HTTP3 validation
+The proxy rule is SOCKS to the running MihomoState endpoint.
 
-Strict mode is not considered complete until the outbound socket-protection path has an integration test.
+Never use:
 
-## 8. Fail-closed startup
+- Java system proxy properties
+- reflection-based WebView proxy hacks
+- a device-wide Android proxy setting
 
-If the user has automatic proxying enabled, startup order is mandatory:
+ProxyController operations are application-process concerns and belong in :core-network.
 
-```text
+## 9. Browser startup and fail-closed gate
+
+Mandatory startup order when automatic proxying is enabled:
+
+~~~text
 Application
- -> load settings
- -> load active profile
- -> build safe runtime config
- -> start mihomo
- -> verify core/controller/listener
- -> configure WebView proxy or VPN
- -> BrowserNetworkGateway = Ready
- -> restore tabs / open external intent URL
-```
+  -> load proxy preferences
+  -> resolve active profile
+  -> BrowserNetworkGateway = Blocked/Starting
+  -> load libmihomo
+  -> verify bridgeABI
+  -> build safe runtime config
+  -> validate config
+  -> start mihomo
+  -> verify SOCKS listener
+  -> verify controller
+  -> apply WebView SOCKS proxy
+  -> BrowserNetworkGateway = Ready
+  -> restore tabs
+  -> process external-intent URL
+~~~
 
-Never restore tabs first and attach the proxy afterwards; that creates a direct-connect leak window.
+Never restore network tabs before proxy readiness.
 
-Default failure behavior:
+On startup failure:
 
-```text
-mihomo unavailable -> BrowserNetworkGateway.Error -> network blocked
-```
+~~~text
+mihomo failure
+  -> proxy rule remains pointed at a non-direct path or network gate remains blocked
+  -> BrowserNetworkGateway.Error
+  -> browser shows recovery UI
+~~~
 
-UI offers explicit actions:
+Recovery UI:
 
 - Retry
-- Temporarily allow direct access
+- Choose another profile
+- Open diagnostics
+- Explicitly use Direct temporarily
 
-Direct fallback must never happen silently by default.
+Silent direct fallback is forbidden by default.
 
-## 9. Profiles and configuration pipeline
+## 10. Profile and subscription pipeline
 
-Treat subscription/local YAML as untrusted input.
+Treat imported and downloaded YAML as untrusted input.
 
-Do not execute a downloaded profile directly.
+Store original and generated configurations separately.
+
+Suggested storage:
+
+~~~text
+filesDir/mihomo/
+  profiles/
+    <profile-id>/
+      source.yaml
+      metadata.json
+  runtime/
+    config.yaml
+    last-known-good.yaml
+  providers/
+  state/
+~~~
 
 Required pipeline:
 
-```text
-Profile source
- -> download/read to temporary file
- -> basic size/type validation
- -> parse/validate
- -> RuntimeConfigBuilder
- -> force application safety overrides
- -> libmihomo validation/setup check
- -> atomic replacement
- -> active runtime config
-```
+~~~text
+source
+  -> temporary file
+  -> maximum-size check
+  -> YAML/basic syntax validation
+  -> libmihomo validateConfig
+  -> RuntimeConfigBuilder
+  -> enforce security overrides
+  -> write runtime temp file
+  -> fsync
+  -> atomic rename
+  -> setup/reload
+  -> health check
+  -> mark last-known-good
+~~~
 
-Store:
+A failed profile/subscription update MUST NOT destroy the currently working runtime config.
 
-```text
-filesDir/mihomo/
-  profiles/
-    <profile-id>.yaml
-  runtime/
-    config.yaml
-  providers/
-  state/
-```
+Subscription URLs and tokens are secrets and MUST be redacted from logs.
 
-The original imported profile and generated runtime profile must remain separate.
+## 11. Native quick proxy UI
 
-Required runtime security overrides regardless of subscription contents:
+Unlike the previous draft, the MVP SHOULD provide a small native quick proxy UI because libmihomo already exposes the required in-process actions.
 
-```yaml
-allow-lan: false
-bind-address: 127.0.0.1
-external-controller: 127.0.0.1:<controller-port>
-secret: <application-generated-secret>
-```
+The quick panel may contain:
 
-A remote subscription must never be allowed to change the controller to `0.0.0.0`, disable its secret, or expose the browser's local proxy to the LAN.
+~~~text
+Proxy
+  Status
+  Active profile
+  Routing mode
+  Proxy group
+  Selected proxy
+  Delay
+  Current traffic
 
-Profile update must use temporary-file + validation + atomic rename semantics. A failed subscription update must leave the last known-good configuration running.
+  [Change proxy]
+  [Test delay]
+  [Open Zashboard]
+~~~
 
-## 10. Controller strategy
+Proxy group/selector data comes from getProxies and queryProxyGroupOrder.
 
-Zashboard expects Clash/mihomo HTTP/WebSocket APIs, so expose mihomo's controller on loopback only.
+Changing a selector uses changeProxy.
 
-Native Compose code should not duplicate the entire controller API. Define a tiny `MihomoController` only for Android-native quick operations such as:
+Delay uses testDelay.
 
-```kotlin
-interface MihomoController {
-    suspend fun health(): Boolean
-    suspend fun version(): String
-    suspend fun getMode(): RoutingMode
-    suspend fun setMode(mode: RoutingMode)
-}
-```
+Do not implement a second full provider/rules/connection dashboard in Compose.
 
-Use Zashboard for complete proxy-group/provider/rules/connections management.
+## 12. Zashboard integration
 
-Generate a strong random controller secret during application setup and keep it in private app storage. Never log it.
+Bundle a pinned Zashboard build inside the APK.
 
-## 11. Zashboard integration
+Prefer the no-fonts distribution where compatible with the selected release.
 
-Bundle Zashboard locally. Do not depend on the hosted dashboard.
+Suggested path:
 
-Prefer its `dist-no-fonts` release because it is small and has no CDN font dependency.
-
-Suggested tree:
-
-```text
+~~~text
 app/src/main/assets/zashboard/
   index.html
   assets/
-  ...
-```
+~~~
 
-Pin a specific Zashboard release and record its checksum/version under a third-party manifest. Do not download `latest` during an ordinary release build without pinning and verification.
+Load local assets through WebViewAssetLoader under an HTTPS appassets origin.
 
-Load it through `WebViewAssetLoader`, for example under:
+Do not load the hosted Zashboard in normal product operation.
 
-```text
-https://appassets.androidplatform.net/zashboard/
-```
+### 12.1 Dedicated WebView
 
-Do not use `file:///android_asset/...`.
+Zashboard uses its own dedicated WebView.
 
-Create a dedicated Dashboard WebView. Do not reuse an ordinary browser tab/`EBWebView` instance because local trusted application content and arbitrary internet content have different security models.
+Do not reuse an arbitrary browser tab or EBWebView instance.
 
-Dashboard WebView policy:
+Dashboard policy:
 
 - JavaScript enabled
-- DOM storage enabled if required by Zashboard
+- DOM storage enabled only as required
 - file access disabled
 - content access disabled
 - mixed content disabled
 - release WebView debugging disabled
-- navigation limited to the local appassets origin and loopback controller/API needs
-- external links leave the Dashboard container
-- no `addJavascriptInterface` in the first implementation
+- no arbitrary addJavascriptInterface
+- navigation restricted to appassets and expected loopback controller interactions
+- external links leave the dashboard container
 
-Zashboard supports setup parameters including `hostname`, `port`, `secret`, `disableUpgradeCore`, and `disableTunMode`.
+### 12.2 Controller
 
-The embedded launch must set:
+Zashboard connects to:
 
-```text
+~~~text
+127.0.0.1:<controller-port>
+~~~
+
+with an application-generated secret.
+
+The controller MUST:
+
+- bind only to loopback
+- require a strong random secret
+- never expose the secret in normal logs
+- never be enabled on 0.0.0.0 by imported profiles
+
+Launch Zashboard with core/TUN management disabled where supported:
+
+~~~text
 disableUpgradeCore=1
 disableTunMode=1
-```
+~~~
 
-Reasons:
+Core lifecycle and Android VPN lifecycle remain application responsibilities.
 
-- Core updates are application/release responsibilities and must not be performed by a Web UI.
-- Android TUN requires `VpnService`, permission and fd lifecycle; a dashboard toggle cannot safely own it.
+## 13. Controller secret storage
 
-Initial implementation may pass localhost/controller credentials through Zashboard's supported setup flow. If the URL representation becomes a security/UX concern, add the smallest possible upstream-compatible bootstrap adaptation later; do not maintain a large Zashboard fork.
+Generate at least 256 bits of cryptographically secure random data.
 
-## 12. Native proxy UI
+Store the secret only in application-private storage.
 
-Compose should provide Android/browser-specific controls only:
+Android Keystore may protect an encryption key used for sensitive preferences if needed, but the implementation should not add an unnecessary crypto framework merely to hide data already protected by the application sandbox.
 
-```text
-Proxy
-  Status: Connected / Starting / Error / Off
-  Active profile
-  Transport: Browser Proxy / Strict VPN
-  Routing mode: Rule / Global / Direct
-  [Open Proxy Dashboard]
-  Profiles
-  Auto start
-  Failure policy
-  Diagnostics
-```
+Never place the secret in:
 
-Do not build Compose copies of:
+- browser history
+- crash reports
+- analytics
+- normal logcat
+- exported files
+- subscription metadata shown to other apps
 
-- proxy groups
-- node list
-- providers
-- rules
-- connection table
-- traffic charts
-- full logs
-- latency dashboard
+## 14. Strict application-only VPN mode
 
-Those are Zashboard's responsibility.
+Strict mode is a later phase.
 
-A small native quick selector may be considered later only as convenience UI, not as a second management implementation.
+Route:
 
-## 13. Dependencies
+~~~text
+EinkBro process
+  -> Android VpnService
+  -> TUN fd
+  -> Clash.startTUN
+  -> mihomo
+  -> Internet
+~~~
 
-Reuse existing EinkBro dependencies wherever possible.
+MihomoVpnService implements TunInterface.
 
-New direct dependencies should be minimal:
+Critical requirements:
 
-- `androidx.webkit:webkit` - WebView `ProxyController`, `WebViewAssetLoader`, feature detection
-- `androidx.datastore:datastore-preferences` - proxy startup/mode/failure settings if not already available
-- `kotlinx-coroutines-android` - runtime lifecycle adapters, if not already present
-- `kotlinx-serialization-json` - local mihomo controller DTOs only if the project has no existing suitable JSON stack
-- a single existing HTTP client for subscription/controller calls; add OkHttp only if EinkBro has no reusable client
-- pinned `libmihomo-android` AAR
+- protect(fd) delegates to VpnService.protect(fd)
+- addAllowedApplication captures only this browser by default
+- TUN fd ownership is explicit
+- onRevoke stops the session
+- process death is handled
+- foreground-service requirements for supported Android versions are satisfied
+- DNS, IPv4, IPv6, TCP and UDP are tested
 
-Do not add Retrofit merely for a small loopback controller client.
+Strict mode must not be presented as complete until the socket-protection integration test passes.
 
-All versions must live in the existing version catalog/build convention rather than being duplicated in feature files.
+## 15. Persistence boundaries
 
-## 14. libmihomo distribution and verification
+Use Room for structured metadata:
 
-Use a pinned `daaass142/libmihomo-android` release artifact.
+- profiles
+- subscriptions
+- update timestamps
+- update status
 
-Release build requirements:
-
-1. Pin wrapper version.
-2. Pin expected bundled mihomo version/bridge ABI.
-3. Verify SHA-256 before consuming the AAR.
-4. Where practical, verify the release signature described by the library repository.
-5. Fail CI on checksum or bridge-ABI mismatch.
-6. Record the effective libmihomo and mihomo versions in the app About/Diagnostics information.
-
-Never build a release by downloading an unpinned artifact from a moving `latest` URL.
-
-## 15. ABI packaging
-
-`libmihomo-android` currently supports:
-
-```text
-arm64-v8a
-armeabi-v7a
-x86_64
-```
-
-EinkBro currently also declares x86 support. The mihomo-enabled variant must not advertise an ABI for which libmihomo has no native library.
-
-Recommended release artifacts:
-
-```text
-browser-arm64-v8a.apk
-browser-armeabi-v7a.apk
-browser-x86_64.apk
-```
-
-A universal APK may be provided for convenience, but ABI-specific APKs should be preferred because the Go core is large per ABI.
-
-## 16. Persistence boundaries
-
-Use Room for structured records such as:
-
-- profile metadata
-- subscription metadata
-- update timestamps/status
-
-Use DataStore/preferences for small user settings:
+Use DataStore/preferences for small settings:
 
 - proxy enabled
-- active profile ID
-- transport mode
-- auto start
+- active profile
+- auto-start
+- browser-proxy vs strict mode
 - fail-closed policy
+- optional direct fallback preference
 
 Use private files for:
 
-- actual YAML profiles
-- generated runtime config
+- YAML
+- runtime config
 - provider files
-- mihomo runtime databases
+- mihomo databases/cache
 
-Do not store large YAML blobs in Room merely for convenience.
+Do not store large YAML blobs in Room.
 
-## 17. Logging and sensitive data
+## 16. Logging and privacy
 
-Never log or send to analytics/crash reporting:
+No new analytics or telemetry is required for this feature.
 
-- controller secret
+Never log:
+
+- controller secrets
 - subscription URL tokens
 - proxy passwords
-- UUIDs/keys
-- Authorization headers
+- UUIDs/private keys
+- authorization headers
 - cookies
-- browsing history generated by mihomo connections
 - page form data
 
-Diagnostics must redact secrets and subscription query parameters.
+SensitiveValueRedactor must sanitize diagnostics before sharing/export.
 
-Debug mihomo logging, if exposed later, must be explicit and temporary rather than always-on.
+Normal diagnostics may include:
 
-## 18. Android permissions
+- app version
+- libmihomo wrapper version
+- bundled mihomo version
+- bridgeABI
+- active profile ID/name
+- listener readiness
+- controller readiness
+- WebView proxy feature support
+- routing mode
+- redacted error messages
 
-Keep permissions minimal.
+## 17. ABI and APK-size policy
 
-Expected additions:
+libmihomo currently supports:
 
-- `INTERNET` already required by the browser
-- foreground-service declarations required by strict VPN mode on supported Android versions
-- `VpnService` declaration with the platform VPN bind permission
+- arm64-v8a
+- armeabi-v7a
+- x86_64
 
-Do not request location, contacts, phone state, storage-all-files, package installation, or unrelated permissions for proxy functionality.
+The mihomo-enabled application MUST NOT advertise x86 because no matching native library is shipped.
 
-The project rule that forbids in-app APK self-update remains unchanged. Zashboard's core-upgrade UI must therefore stay disabled.
+Release preference:
 
-## 19. Testing requirements
+- arm64-v8a APK
+- armeabi-v7a APK
+- x86_64 APK
+- AAB for Play distribution
 
-### Unit tests
+A universal APK may be published for convenience but should not be the primary download because the Go core is large per ABI.
+
+The inspected v0.3.2-alpha.20260827 AAR is approximately 45.8 MB before final APK packaging. The project must accept that embedding mihomo materially increases binary size.
+
+Do not compromise architecture or security merely to preserve the original small EinkBro APK size.
+
+## 18. Dependency verification
+
+Release CI MUST verify:
+
+### libmihomo
+
+- exact wrapper version
+- expected SHA-256
+- expected bridgeABI
+- expected supported ABIs
+- bundled mihomo version from release metadata when available
+
+### Zashboard
+
+- exact tag/release or commit
+- exact SHA-256 of the bundled distribution
+- no floating latest download
+
+The pinned dependency information should live in one build/third-party manifest rather than being duplicated across scripts.
+
+## 19. Security boundaries
+
+~~~text
+Untrusted Internet
+      |
+      v
+Browser WebView
+      |
+      X  no privileged JS bridge
+      |
+Dedicated Dashboard WebView
+      |
+      v
+Loopback Controller + secret
+      |
+      v
+Embedded mihomo
+~~~
+
+Browser pages must never receive privileged Android bridge methods for proxy control.
+
+Zashboard must never receive arbitrary Android APIs.
+
+Controller authentication remains required even though it binds to loopback.
+
+## 20. Testing requirements
+
+### 20.1 Unit tests
 
 Required:
 
-- runtime state-machine serialization/idempotency
-- `bridgeABI` mismatch handling
+- LibMihomoActionClient envelope/error parsing
+- state-machine serialization/idempotency
+- bridgeABI mismatch handling
+- SOCKS/controller port allocation retry
 - runtime security overrides
-- profile failure preserves last known-good config
-- atomic config replacement
-- secret/token redaction
-- fail-closed policy
-- transport-mode switching state
+- fail-closed startup policy
+- last-known-good config rollback
+- subscription token redaction
+- proxy model mapping
+- routing-mode mapping
 
-### Integration tests
+### 20.2 Android integration tests
 
-Required before MVP release:
+Required for browser-proxy MVP:
 
 1. Load libmihomo on a supported ABI.
-2. Apply a minimal known profile.
-3. Verify mixed listener/controller readiness.
-4. Load embedded Zashboard without internet-hosted assets.
-5. Verify Zashboard can read proxies through REST/WebSocket.
-6. Switch a selector and observe the active proxy change.
-7. Kill/stop mihomo and verify WebView cannot silently fall back to direct when fail-closed is enabled.
+2. Start a minimal known profile.
+3. Verify SOCKS listener readiness.
+4. Verify controller readiness.
+5. Apply AndroidX WebKit SOCKS proxy.
+6. Load a test HTTPS page through the proxy.
+7. Switch a selector using invokeAction.
+8. Verify the selected proxy changed.
+9. Stop the local listener/core.
+10. Verify WebView does not silently use direct networking under fail-closed policy.
+11. Open bundled Zashboard without remote dashboard assets.
+12. Verify Zashboard can access the controller with the generated secret.
 
-### Strict-mode release blockers
+### 20.3 Strict-mode release blockers
 
-Validate at least:
+Before Strict mode is considered production-ready:
 
-- application-only capture
-- `VpnService.protect()` callback path
-- no outbound routing loop
-- IPv4
-- IPv6
-- TCP
-- UDP
-- DNS
-- WebSocket
-- WebRTC/QUIC behavior where supported
-- VPN revoke/process-death cleanup
+- VpnService.protect callback works
+- no routing loop
+- application-only capture works
+- IPv4 works
+- IPv6 works
+- TCP works
+- UDP works
+- DNS works
+- WebSocket works
+- QUIC/HTTP3 behavior is documented/tested
+- revoke/process-death cleanup works
 
-## 20. CI and supply-chain requirements
+## 21. CI requirements
 
-PR CI should run existing EinkBro checks plus proxy-specific tests.
+Pull-request CI should include:
 
-Release CI should:
+- existing EinkBro unit/lint/build checks
+- core-mihomo unit tests
+- core-network unit tests
+- dependency pin verification
+- supported-ABI validation
 
-```text
-verify pinned libmihomo artifact/hash
-verify pinned Zashboard artifact/hash
-run unit tests
+Release CI should include:
+
+~~~text
+verify libmihomo hash/metadata
+verify Zashboard hash
+run tests
 run lint
 assemble supported ABI APKs
-run release checks/R8
-publish checksums
-```
+assemble AAB where applicable
+run R8/release build
+emit checksums
+emit third-party version manifest
+~~~
 
-Do not add meaningless UI snapshots or broad flaky E2E suites merely to increase test count. Tests should protect an actual boundary or regression risk.
+Do not add broad flaky tests merely to increase test count. Every test must protect a real boundary or regression risk.
 
-## 21. Implementation phases
+## 22. Non-goals for the initial MVP
 
-### Phase 1 - MVP browser proxy
+The initial MVP will not:
 
-- add `:core-mihomo`
-- add `:core-network`
-- pin/integrate libmihomo AAR
-- runtime lifecycle adapter
-- profile storage/import
-- safe runtime config builder
-- start mihomo before browser restoration
-- AndroidX WebKit proxy integration
-- fail-closed network gate
-- embedded local Zashboard
-- native proxy overview/settings
-- Rule/Global/Direct quick switch
-- diagnostics/version display
+- become a general system-wide Clash client
+- proxy unrelated Android apps
+- maintain a custom mihomo JNI bridge inside EinkBro
+- download/update executable cores at runtime
+- allow Zashboard to upgrade the core
+- expose LAN proxy/controller access
+- build a full duplicate Compose dashboard
+- silently bypass mihomo on failure
 
-### Phase 2 - strict mode
+## 23. MVP definition of done
 
-- `MihomoVpnService`
-- `TunInterface`
-- socket protect callback
-- application-only VPN
-- TUN fd lifecycle
-- foreground service
-- strict-mode DNS/UDP/IPv6 tests
+MVP is complete only when:
 
-### Phase 3 - polish
-
-- background subscription refresh with WorkManager
-- optional native quick selector
-- E-Ink-specific Dashboard reduced-motion/theme tweaks
-- deeper diagnostics
-- battery/runtime suspension tuning with `Clash.suspended(...)`
-
-## 22. Definition of done for MVP
-
-MVP is complete only when all of these are true:
-
-- [ ] EinkBro's existing browsing behavior still works.
-- [ ] mihomo automatically starts when configured.
-- [ ] libmihomo `bridgeABI` is validated before use.
+- [ ] EinkBro baseline browser functions still work.
+- [ ] Exact libmihomo AAR is pinned and hash-verified.
+- [ ] Unsupported x86 ABI is removed from mihomo-enabled release output.
+- [ ] bridgeABI is validated before runtime setup.
+- [ ] mihomo starts automatically for an active profile.
+- [ ] runtime config forces loopback-only SOCKS and controller endpoints.
+- [ ] WebView uses SOCKS5 through AndroidX WebKit ProxyController.
 - [ ] restored tabs cannot race ahead of proxy startup.
-- [ ] WebView uses the app-owned local mihomo listener in Browser Proxy mode.
-- [ ] proxy failure is fail-closed by default.
-- [ ] local YAML can be imported.
-- [ ] a subscription profile can be downloaded and safely updated.
-- [ ] an invalid update cannot destroy the active configuration.
-- [ ] runtime config forcibly keeps LAN/controller exposure disabled.
-- [ ] Zashboard is bundled in the APK and opens without its hosted site.
-- [ ] Zashboard can manage proxy groups/selectors/providers/rules/connections supported by the core.
-- [ ] Zashboard cannot update the core.
-- [ ] Zashboard cannot toggle Android TUN directly.
-- [ ] controller is loopback-only and authenticated.
-- [ ] release builds do not expose WebView debugging.
-- [ ] secrets/tokens are absent from normal logs.
-- [ ] libmihomo and Zashboard versions are pinned and verifiable.
-- [ ] APKs are produced only for ABIs supported by the bundled native core.
+- [ ] fail-closed behavior is the default.
+- [ ] local YAML profiles work.
+- [ ] subscription updates are validated and atomic.
+- [ ] last-known-good rollback works.
+- [ ] native quick proxy group selection works through invokeAction.
+- [ ] native delay testing works.
+- [ ] traffic/status display works.
+- [ ] Zashboard is bundled locally.
+- [ ] Zashboard connects to the authenticated loopback controller.
+- [ ] Zashboard cannot upgrade core or own Android TUN lifecycle.
+- [ ] secrets/tokens are redacted from normal diagnostics.
+- [ ] release artifacts are produced only for supported ABIs.
+- [ ] proxy-stop/failure leak test passes.
 
-## 23. Non-goals
+## 24. Final ownership rule
 
-The initial implementation will not:
+~~~text
+EinkBro / Compose
+  = browser and Android UX
 
-- become a general device-wide Clash client
-- replace Zashboard with a full Compose proxy manager
-- add an in-app APK/core updater
-- expose a LAN proxy/controller by default
-- maintain its own mihomo CGo/JNI fork inside EinkBro
-- silently use direct networking when the configured proxy fails
+core-network
+  = browser readiness, ProxyController, fail-closed gate
 
-## 24. Final architecture rule
+core-mihomo
+  = lifecycle, profiles, security, typed libmihomo adapter
 
-Keep ownership explicit:
+libmihomo-android
+  = native mihomo bridge/runtime
 
-```text
-EinkBro / Compose = browser and Android UX
-core-network       = browser network readiness and WebView proxy binding
-core-mihomo        = lifecycle/configuration/security/VPN adapter
-libmihomo-android  = native mihomo bridge/runtime
-Zashboard          = complete mihomo management UI
-mihomo             = routing/proxy engine
-```
+Zashboard
+  = complete advanced mihomo management UI
 
-If a feature belongs to one of these layers, do not reimplement it in another layer without a concrete technical reason.
+mihomo
+  = proxy protocols, routing, DNS, providers and connections
+~~~
+
+Keep these ownership boundaries explicit. Do not reimplement a responsibility in another layer unless a documented technical limitation requires it.
