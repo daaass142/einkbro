@@ -44,7 +44,6 @@ import info.plateaukao.einkbro.core.mihomo.api.RoutingMode
 import info.plateaukao.einkbro.core.mihomo.profile.ProfileRecord
 import info.plateaukao.einkbro.core.mihomo.profile.ProfileSourceType
 import info.plateaukao.einkbro.preference.ProxyTransportMode
-import java.net.URI
 
 @Composable
 internal fun RuntimeStatusCard(
@@ -703,14 +702,8 @@ private fun profileSourceLabel(profile: ProfileRecord): String =
     when (profile.sourceType) {
         ProfileSourceType.LOCAL -> stringResource(R.string.proxy_local_profile)
         ProfileSourceType.SUBSCRIPTION -> {
-            val host = runCatching { URI(profile.sourceUrl.orEmpty()).host }
-                .getOrNull()
-                .orEmpty()
-            val safeHost = if (host.isBlank()) {
-                stringResource(R.string.proxy_subscription)
-            } else {
-                host
-            }
+            val safeHost = ProxyDisplayFormatter.subscriptionHost(profile.sourceUrl)
+                ?: stringResource(R.string.proxy_subscription)
             stringResource(R.string.proxy_subscription_host, safeHost)
         }
     }
