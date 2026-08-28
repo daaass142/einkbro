@@ -17,6 +17,13 @@ class BrowserNetworkGatewayTest {
     }
 
     @Test
+    fun proxySupportReflectsAdapterCapability() {
+        val gateway = BrowserNetworkGatewayImpl(FakeProxyAdapter())
+
+        assertEquals(true, gateway.proxySupported)
+    }
+
+    @Test
     fun explicitDirectClearsProxy() = runTest {
         val adapter = FakeProxyAdapter()
         val gateway = BrowserNetworkGatewayImpl(adapter)
@@ -48,6 +55,8 @@ class BrowserNetworkGatewayTest {
 
     private class FakeProxyAdapter : WebViewProxyAdapter {
         var endpoint: BrowserProxyEndpoint? = null
+
+        override fun isSupported(): Boolean = true
 
         override fun requireSupported() = Unit
 
