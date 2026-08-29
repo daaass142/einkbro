@@ -8,6 +8,7 @@ import info.plateaukao.einkbro.activity.SettingRoute.ChatGPT
 import info.plateaukao.einkbro.activity.SettingRoute.DataControl
 import info.plateaukao.einkbro.activity.SettingRoute.Gesture
 import info.plateaukao.einkbro.activity.SettingRoute.Misc
+import info.plateaukao.einkbro.activity.SettingRoute.Proxy
 import info.plateaukao.einkbro.activity.SettingRoute.Search
 import info.plateaukao.einkbro.activity.SettingRoute.StartControl
 import info.plateaukao.einkbro.activity.SettingRoute.Toolbar
@@ -57,6 +58,11 @@ fun buildMainSettingItems(): List<SettingItemInterface> = listOf(
         destination = Search
     ),
     DividerSettingItem(),
+    NavigateSettingItem(
+        R.string.setting_title_proxy,
+        R.drawable.icon_earth,
+        destination = Proxy
+    ),
     NavigateSettingItem(
         R.string.misc,
         R.drawable.icon_dots,

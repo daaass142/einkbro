@@ -91,6 +91,21 @@ class MihomoRuntimeManagerTest {
             setupParams: String,
             callback: (String?) -> Unit,
         ) = callback("")
+
+        override fun startTun(
+            fd: Int,
+            protect: (Int) -> Unit,
+            resolverProcess: (Int, String, String, Int) -> String,
+            device: String,
+            stack: String,
+            address: String,
+            dns: String,
+            mtu: Int,
+        ) = Unit
+
+        override fun stopTun() = Unit
+
+        override fun suspended(suspended: Boolean) = Unit
     }
 
     private class CountingActionClient : MihomoActionClient {

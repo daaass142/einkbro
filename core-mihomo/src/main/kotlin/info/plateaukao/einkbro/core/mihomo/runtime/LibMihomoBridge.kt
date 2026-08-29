@@ -12,6 +12,18 @@ internal interface LibMihomoBridge {
         setupParams: String,
         callback: (String?) -> Unit,
     )
+    fun startTun(
+        fd: Int,
+        protect: (Int) -> Unit,
+        resolverProcess: (Int, String, String, Int) -> String,
+        device: String,
+        stack: String,
+        address: String,
+        dns: String,
+        mtu: Int,
+    )
+    fun stopTun()
+    fun suspended(suspended: Boolean)
 }
 
 internal object ClashLibMihomoBridge : LibMihomoBridge {
@@ -29,4 +41,28 @@ internal object ClashLibMihomoBridge : LibMihomoBridge {
         setupParams: String,
         callback: (String?) -> Unit,
     ) = Clash.quickSetup(initParams, setupParams, callback)
+
+    override fun startTun(
+        fd: Int,
+        protect: (Int) -> Unit,
+        resolverProcess: (Int, String, String, Int) -> String,
+        device: String,
+        stack: String,
+        address: String,
+        dns: String,
+        mtu: Int,
+    ) = Clash.startTUN(
+        fd,
+        protect,
+        resolverProcess,
+        device,
+        stack,
+        address,
+        dns,
+        mtu,
+    )
+
+    override fun stopTun() = Clash.stopTun()
+
+    override fun suspended(suspended: Boolean) = Clash.suspended(suspended)
 }

@@ -3,6 +3,7 @@ package info.plateaukao.einkbro.activity
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE
+import android.app.AlertDialog
 import android.app.PictureInPictureParams
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -49,6 +50,7 @@ import info.plateaukao.einkbro.preference.ChatGPTActionInfo
 import info.plateaukao.einkbro.preference.AiConfig
 import info.plateaukao.einkbro.preference.BrowserConfig
 import info.plateaukao.einkbro.preference.ConfigManager
+import info.plateaukao.einkbro.proxy.MihomoBrowserCoordinator
 import info.plateaukao.einkbro.preference.TabConfig
 import info.plateaukao.einkbro.preference.UiConfig
 import info.plateaukao.einkbro.preference.DisplayConfig
@@ -133,6 +135,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
     private val bookmarkManager: BookmarkManager by inject()
     private val recordDb: RecordRepository by inject()
     private val searchSuggestionViewModel: SearchSuggestionViewModel by inject()
+    private val mihomoBrowserCoordinator: MihomoBrowserCoordinator by inject()
 
     // ViewModels
     private val ttsViewModel: TtsViewModel by koinViewModel()
@@ -148,6 +151,8 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
     // Controllers
     private lateinit var twoPaneController: TwoPaneController
     private var downloadReceiver: BroadcastReceiver? = null
+    private var pendingBrowserIntent: Intent? = null
+    private var browserPostNetworkInitialized = false
 
     private val adFilter: AdFilter = AdFilter.get()
     private val filterViewModel: FilterViewModel = adFilter.viewModel
@@ -901,10 +906,42 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
         // Clear stale album entries so initSavedTabs() doesn't append duplicates
         albumViewModel.clearAlbums();
 
-        dispatchIntent(intent)
+        prepareNetworkAndDispatch(intent)
+    }
+
+    private fun prepareNetworkAndDispatch(nextIntent: Intent) {
+        pendingBrowserIntent = Intent(nextIntent)
+        lifecycleScope.launch {
+            try {
+                mihomoBrowserCoordinator.ensureReady()
+                dispatchPreparedBrowserIntent()
+            } catch (error: Throwable) {
+                if (config.proxy.failClosed) {
+                    showProxyStartupFailure(error)
+                } else {
+                    mihomoBrowserCoordinator.useDirectTemporarily()
+                    dispatchPreparedBrowserIntent()
+                }
+            }
+        }
+    }
+
+    private fun dispatchPreparedBrowserIntent() {
+        val next = pendingBrowserIntent ?: return
+        pendingBrowserIntent = null
+        dispatchIntent(next)
         intentDispatchDelegate.shouldLoadTabState = false
 
-        if (config.ui.keepAwake) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (!browserPostNetworkInitialized) {
+            browserPostNetworkInitialized = true
+            finishBrowserInitialization()
+        }
+    }
+
+    private fun finishBrowserInitialization() {
+        if (config.ui.keepAwake) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
 
         translationDelegate.initLanguageLabel()
         chromeSetupDelegate.initTouchAreaViewController()
@@ -915,7 +952,6 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
 
         if (config.ui.hideStatusbar) fullscreenDelegate.hideStatusBar()
 
-        // Initialize statusbar controller; show it when toolbar is configured hidden at launch
         statusbarViewController
         if (config.ui.shouldHideToolbar) statusbarViewController.show()
 
@@ -929,6 +965,29 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
         }
 
         binding.root.postDelayed({ MenuDialogFragment.prewarm(this) }, 1500)
+    }
+
+    private fun showProxyStartupFailure(error: Throwable) {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.proxy_startup_failed_title)
+            .setMessage(
+                getString(
+                    R.string.proxy_startup_failed_message,
+                    error.message ?: error.javaClass.simpleName,
+                )
+            )
+            .setCancelable(false)
+            .setPositiveButton(R.string.proxy_retry) { _, _ ->
+                prepareNetworkAndDispatch(pendingBrowserIntent ?: intent)
+            }
+            .setNegativeButton(R.string.proxy_use_direct_once) { _, _ ->
+                lifecycleScope.launch {
+                    mihomoBrowserCoordinator.useDirectTemporarily()
+                    dispatchPreparedBrowserIntent()
+                }
+            }
+            .show()
     }
 
     private fun initDownloadReceiver() {
@@ -947,13 +1006,17 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        dispatchIntent(intent)
+        prepareNetworkAndDispatch(intent)
     }
 
     override fun onResume() {
         super.onResume()
         displayConfigDelegate.onResume()
         if (config.restartChanged) { config.restartChanged = false; dialogManager.showRestartConfirmDialog() }
+        if (!browserPostNetworkInitialized || !browserState.isWebViewInitialized) {
+            disablePendingTransitions()
+            return
+        }
         statusbarViewController.refresh()
         if (!binding.appBar.isVisible) statusbarViewController.show() else statusbarViewController.hide()
         updateTitle()
