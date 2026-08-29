@@ -51,6 +51,7 @@ import info.plateaukao.einkbro.preference.AiConfig
 import info.plateaukao.einkbro.preference.BrowserConfig
 import info.plateaukao.einkbro.preference.ConfigManager
 import info.plateaukao.einkbro.proxy.MihomoBrowserCoordinator
+import info.plateaukao.einkbro.core.mihomo.api.MihomoException
 import info.plateaukao.einkbro.preference.TabConfig
 import info.plateaukao.einkbro.preference.UiConfig
 import info.plateaukao.einkbro.preference.DisplayConfig
@@ -153,6 +154,11 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
     private var downloadReceiver: BroadcastReceiver? = null
     private var pendingBrowserIntent: Intent? = null
     private var browserPostNetworkInitialized = false
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) checkAdBlockerList()
+        }
 
     private val adFilter: AdFilter = AdFilter.get()
     private val filterViewModel: FilterViewModel = adFilter.viewModel
@@ -974,7 +980,13 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
             .setMessage(
                 getString(
                     R.string.proxy_startup_failed_message,
-                    error.message ?: error.javaClass.simpleName,
+                    when (error) {
+                        is MihomoException.NativeLoadFailure ->
+                            getString(R.string.proxy_native_load_message)
+                        is MihomoException.BridgeAbiMismatch ->
+                            getString(R.string.proxy_bridge_abi_message)
+                        else -> error.message ?: error.javaClass.simpleName
+                    },
                 )
             )
             .setCancelable(false)
@@ -1198,10 +1210,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
     }
 
     private fun requestNotificationPermission() {
-        val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) checkAdBlockerList()
-        }
-        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private val preferenceChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->

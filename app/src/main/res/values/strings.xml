@@ -845,4 +845,7 @@
     <string name="proxy_not_ready">Not ready</string>
     <string name="proxy_supported">Supported</string>
     <string name="proxy_unsupported">Unsupported</string>
+    <string name="proxy_native_load_message">The embedded Mihomo native libraries could not be loaded. Reinstall this build and try again.</string>
+    <string name="proxy_bridge_abi_message">The embedded Mihomo bridge is incompatible with this app build.</string>
+    <string name="proxy_app_incompatible_message">The embedded Mihomo runtime is unavailable or incompatible with this app build.</string>
 </resources>

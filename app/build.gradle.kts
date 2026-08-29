@@ -103,8 +103,8 @@ android {
         // reaching BrowserActivity.onKeyDown -> KeyHandler; the manifest opts out
         // via enableOnBackInvokedCallback=false.
         targetSdk = 36
-        versionCode = 16_04_03
-        versionName = "16.4.2-mihomo.2"
+        versionCode = 16_04_04
+        versionName = "16.4.2-mihomo.3"
 
         // Google Drive backup sync: an "installed app" OAuth client (not a secret;
         // PKCE, no client secret) with the reversed-client-id custom-scheme redirect.
@@ -199,6 +199,10 @@ android {
     }
 
     packaging {
+        // libmihomo-android's Clash.load() resolves libclash.so and
+        // libmihomo-jni.so from applicationInfo.nativeLibraryDir by filesystem path.
+        // Force PackageManager to extract JNI libraries so those paths exist.
+        jniLibs.useLegacyPackaging = true
         resources.excludes.add("/META-INF/{AL2.0,LGPL2.1}")
         // kxml2's service file uses a non-standard comma-separated entry that R8 cannot
         // parse; Android registers KXmlParser/KXmlSerializer via its platform XmlPullParserFactory.

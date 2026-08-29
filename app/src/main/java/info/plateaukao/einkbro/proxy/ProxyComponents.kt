@@ -730,6 +730,8 @@ private fun errorDefaultMessage(category: ProxyErrorCategory): String =
             stringResource(R.string.proxy_vpn_permission_denied_message)
         ProxyErrorCategory.PROFILE_REQUIRED ->
             stringResource(R.string.proxy_profile_required_message)
+        ProxyErrorCategory.APP_INCOMPATIBLE ->
+            stringResource(R.string.proxy_app_incompatible_message)
         else -> stringResource(R.string.proxy_status_error_summary)
     }
 

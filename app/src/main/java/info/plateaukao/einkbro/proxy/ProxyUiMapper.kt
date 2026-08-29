@@ -31,9 +31,13 @@ internal object ProxyUiMapper {
                 }
 
             is MihomoBrowserState.Failed -> {
-                val reason = SensitiveValueRedactor.redactUrl(
-                    browserState.error.message ?: browserState.error.javaClass.simpleName
-                )
+                val reason = when (browserState.error) {
+                    is MihomoException.NativeLoadFailure,
+                    is MihomoException.BridgeAbiMismatch -> null
+                    else -> SensitiveValueRedactor.redactUrl(
+                        browserState.error.message ?: browserState.error.javaClass.simpleName
+                    )
+                }
                 if (enabled && failClosed) {
                     RuntimeUiStatus.Blocked(reason)
                 } else {
@@ -68,10 +72,11 @@ internal object ProxyUiMapper {
 
         return ProxyUiError(
             category = category,
-            message = if (category == ProxyErrorCategory.PROFILE_REQUIRED) {
-                ""
-            } else {
-                SensitiveValueRedactor.redactUrl(
+            message = when {
+                category == ProxyErrorCategory.PROFILE_REQUIRED -> ""
+                error is MihomoException.NativeLoadFailure ||
+                    error is MihomoException.BridgeAbiMismatch -> ""
+                else -> SensitiveValueRedactor.redactUrl(
                     error.message ?: error.javaClass.simpleName
                 )
             },
